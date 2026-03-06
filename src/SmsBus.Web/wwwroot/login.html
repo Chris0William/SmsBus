@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMS接码平台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .slider-track { position:relative; height:40px; background:#e8e8e8; border-radius:4px; overflow:hidden; }
+        .slider-track .fill { position:absolute; left:0; top:0; bottom:0; width:0; background:#91d5ff; border-radius:4px 0 0 4px; }
+        .slider-track .fill.ok { background:#52c41a; width:100%!important; transition:width .3s; }
+        .slider-track .fill.fail { background:#ff4d4f; transition:background .2s; }
+        .slider-thumb {
+            position:absolute; left:0; top:2px; width:36px; height:36px; background:#fff;
+            border-radius:4px; box-shadow:0 2px 6px rgba(0,0,0,.15); display:flex; align-items:center;
+            justify-content:center; cursor:grab; z-index:2; font-size:16px; color:#666; user-select:none;
+        }
+        .slider-thumb:active { cursor:grabbing; }
+        .slider-thumb.ok { background:#52c41a; color:#fff; }
+        .slider-thumb.fail { background:#ff4d4f; color:#fff; }
+        .slider-hint { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:#999; font-size:13px; pointer-events:none; user-select:none; }
+        @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-lg w-full max-w-sm p-8">
+        <h1 class="text-2xl font-bold text-gray-800 text-center mb-1">SMS接码平台</h1>
+        <p id="subtitle" class="text-sm text-gray-400 text-center mb-5">用户登录</p>
+
+        <div class="flex justify-center mb-6 border-b">
+            <button id="tabLogin" onclick="switchTab('login')"
+                class="px-6 py-2 text-sm font-medium border-b-2 border-blue-500 text-blue-600 -mb-px">登录</button>
+            <button id="tabRegister" onclick="switchTab('register')"
+                class="px-6 py-2 text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-gray-600 -mb-px">注册</button>
+        </div>
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">邮箱</label>
+                <input id="email" type="email" autocomplete="email"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                    placeholder="请输入邮箱地址">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                <input id="password" type="password" autocomplete="current-password"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                    placeholder="请输入密码">
+            </div>
+            <div id="confirmRow" class="hidden">
+                <label class="block text-sm font-medium text-gray-700 mb-1">确认密码</label>
+                <input id="confirmPassword" type="password" autocomplete="new-password"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                    placeholder="请再次输入密码">
+            </div>
+
+            <!-- 人机验证 -->
+            <div>
+                <div id="captchaBtn" class="border border-gray-200 rounded-lg p-3 cursor-pointer hover:bg-gray-50 transition flex items-center gap-3" onclick="startCaptcha()">
+                    <div class="w-7 h-7 border-2 border-gray-300 rounded flex items-center justify-center flex-shrink-0">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </div>
+                    <span class="text-sm text-gray-500">点击进行人机验证</span>
+                </div>
+                <div id="captchaOk" class="hidden border border-green-200 bg-green-50 rounded-lg p-3 flex items-center gap-3">
+                    <div class="w-7 h-7 bg-green-500 rounded flex items-center justify-center flex-shrink-0">
+                        <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                    </div>
+                    <span class="text-sm text-green-600 font-medium">验证通过</span>
+                </div>
+                <div id="captchaBox" class="hidden border border-gray-200 rounded-lg overflow-hidden">
+                    <div class="relative bg-gray-200" style="aspect-ratio:300/150;">
+                        <canvas id="captchaCvs" class="w-full h-full block"></canvas>
+                        <canvas id="captchaPiece" class="absolute" style="box-shadow:0 0 8px rgba(0,0,0,.3);pointer-events:none;"></canvas>
+                    </div>
+                    <div class="slider-track" id="sTrack">
+                        <div class="fill" id="sFill"></div>
+                        <span class="slider-hint" id="sHint">向右拖动滑块完成验证</span>
+                        <div class="slider-thumb" id="sThumb">&#8680;</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="rememberRow" class="flex items-center">
+                <input id="rememberMe" type="checkbox" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                <label for="rememberMe" class="ml-2 text-sm text-gray-600">记住我</label>
+            </div>
+
+            <div id="error" class="hidden text-red-500 text-sm text-center bg-red-50 py-2 rounded-lg"></div>
+
+            <button onclick="doSubmit()" id="submitBtn"
+                class="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition">登录</button>
+        </div>
+    </div>
+
+<script>
+let mode = 'login';
+let verified = false;
+let verifiedToken = '';
+
+function switchTab(tab) {
+    mode = tab;
+    const isLogin = tab === 'login';
+    document.getElementById('subtitle').textContent = isLogin ? '用户登录' : '用户注册';
+    document.getElementById('submitBtn').textContent = isLogin ? '登录' : '注册';
+    document.getElementById('confirmRow').classList.toggle('hidden', isLogin);
+    document.getElementById('rememberRow').classList.toggle('hidden', !isLogin);
+    document.getElementById('tabLogin').className = 'px-6 py-2 text-sm font-medium border-b-2 -mb-px ' +
+        (isLogin ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600');
+    document.getElementById('tabRegister').className = 'px-6 py-2 text-sm font-medium border-b-2 -mb-px ' +
+        (!isLogin ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600');
+    document.getElementById('error').classList.add('hidden');
+    document.getElementById('password').autocomplete = isLogin ? 'current-password' : 'new-password';
+}
+
+// ========== CAPTCHA ==========
+const CW = 300, CH = 150, PS = 42;
+
+function createRng(seed) {
+    let s = seed | 0;
+    return () => { s = (s * 1664525 + 1013904223) | 0; return (s >>> 0) / 4294967296; };
+}
+
+function drawBg(ctx, seed) {
+    const r = createRng(seed);
+    const grad = ctx.createLinearGradient(0, 0, CW, CH);
+    grad.addColorStop(0, `rgb(${80+r()*100|0},${80+r()*100|0},${80+r()*100|0})`);
+    grad.addColorStop(1, `rgb(${40+r()*80|0},${40+r()*80|0},${40+r()*80|0})`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, CW, CH);
+    for (let i = 0; i < 12; i++) {
+        ctx.beginPath();
+        ctx.arc(r()*CW, r()*CH, r()*25+10, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(${r()*256|0},${r()*256|0},${r()*256|0},${r()*.15+.05})`;
+        ctx.fill();
+    }
+    for (let i = 0; i < 6; i++) {
+        ctx.beginPath();
+        ctx.moveTo(r()*CW, r()*CH);
+        ctx.lineTo(r()*CW, r()*CH);
+        ctx.strokeStyle = `rgba(${r()*256|0},${r()*256|0},${r()*256|0},.12)`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+}
+
+async function startCaptcha() {
+    if (verified) return;
+    try {
+        const res = await fetch('/api/captcha');
+        const data = await res.json();
+
+        const cvs = document.getElementById('captchaCvs');
+        const ctx = cvs.getContext('2d');
+        cvs.width = CW; cvs.height = CH;
+
+        // decode targetX
+        const enc = atob(data.data);
+        const tx = (enc.charCodeAt(0) ^ data.token.charCodeAt(0)) << 8 |
+                   (enc.charCodeAt(1) ^ data.token.charCodeAt(1));
+        const ty = data.y;
+
+        drawBg(ctx, data.seed);
+
+        // extract piece
+        const pieceData = ctx.getImageData(tx, ty, PS, PS);
+        // draw gap
+        ctx.fillStyle = 'rgba(0,0,0,.35)';
+        ctx.fillRect(tx, ty, PS, PS);
+        ctx.strokeStyle = 'rgba(255,255,255,.5)';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(tx, ty, PS, PS);
+
+        // piece canvas
+        const pc = document.getElementById('captchaPiece');
+        pc.width = PS; pc.height = PS;
+        const pctx = pc.getContext('2d');
+        pctx.putImageData(pieceData, 0, 0);
+        pctx.strokeStyle = 'rgba(255,255,255,.7)';
+        pctx.lineWidth = 2;
+        pctx.strokeRect(1, 1, PS-2, PS-2);
+
+        // position piece
+        const container = cvs.parentElement;
+        const scale = container.offsetWidth / CW;
+        pc.style.width = (PS * scale) + 'px';
+        pc.style.height = (PS * scale) + 'px';
+        pc.style.top = (ty * scale) + 'px';
+        pc.style.left = '0px';
+
+        document.getElementById('captchaBtn').classList.add('hidden');
+        document.getElementById('captchaBox').classList.remove('hidden');
+
+        initSlider(data.token, container, pc, scale);
+    } catch (e) {
+        console.error('加载验证码失败', e);
+    }
+}
+
+function initSlider(token, container, pc, scale) {
+    const track = document.getElementById('sTrack');
+    const thumb = document.getElementById('sThumb');
+    const fill = document.getElementById('sFill');
+    const hint = document.getElementById('sHint');
+
+    // reset
+    thumb.style.left = '0'; fill.style.width = '0'; pc.style.left = '0';
+    thumb.className = 'slider-thumb'; fill.className = 'fill';
+    hint.textContent = '向右拖动滑块完成验证';
+
+    const tw = 36;
+    let dragging = false, startX = 0, slideX = 0;
+
+    function getMaxSlide() { return track.offsetWidth - tw; }
+    function getMaxPiece() { return container.offsetWidth - pc.offsetWidth; }
+
+    function onStart(x) { dragging = true; startX = x; slideX = 0; }
+    function onMove(x) {
+        if (!dragging) return;
+        const ms = getMaxSlide();
+        slideX = Math.max(0, Math.min(ms, x - startX));
+        thumb.style.left = slideX + 'px';
+        fill.style.width = slideX + 'px';
+        pc.style.left = ((slideX / ms) * getMaxPiece()) + 'px';
+    }
+    async function onEnd() {
+        if (!dragging) return;
+        dragging = false;
+
+        const ms = getMaxSlide();
+        const naturalX = Math.round((slideX / ms) * (CW - PS));
+
+        try {
+            const res = await fetch('/api/captcha/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token, x: naturalX })
+            });
+            const d = await res.json();
+
+            if (d.verified) {
+                verified = true;
+                verifiedToken = d.verifiedToken;
+                fill.className = 'fill ok';
+                thumb.className = 'slider-thumb ok';
+                thumb.innerHTML = '&#10003;';
+                hint.textContent = '验证通过';
+                cleanup();
+                setTimeout(() => {
+                    document.getElementById('captchaBox').classList.add('hidden');
+                    document.getElementById('captchaOk').classList.remove('hidden');
+                }, 500);
+            } else {
+                fill.className = 'fill fail';
+                thumb.className = 'slider-thumb fail';
+                track.style.animation = 'shake .3s';
+                setTimeout(() => {
+                    track.style.animation = '';
+                    cleanup();
+                    startCaptcha();
+                }, 500);
+            }
+        } catch {
+            cleanup();
+            startCaptcha();
+        }
+    }
+
+    function ptrDown(e) { e.preventDefault(); thumb.setPointerCapture(e.pointerId); onStart(e.clientX); }
+    function ptrMove(e) { onMove(e.clientX); }
+    function ptrUp() { onEnd(); }
+
+    thumb.addEventListener('pointerdown', ptrDown);
+    document.addEventListener('pointermove', ptrMove);
+    document.addEventListener('pointerup', ptrUp);
+
+    function cleanup() {
+        thumb.removeEventListener('pointerdown', ptrDown);
+        document.removeEventListener('pointermove', ptrMove);
+        document.removeEventListener('pointerup', ptrUp);
+    }
+    // store cleanup for reset
+    window._captchaCleanup = cleanup;
+}
+
+function resetCaptcha() {
+    verified = false;
+    verifiedToken = '';
+    if (window._captchaCleanup) { window._captchaCleanup(); window._captchaCleanup = null; }
+    document.getElementById('captchaBtn').classList.remove('hidden');
+    document.getElementById('captchaBox').classList.add('hidden');
+    document.getElementById('captchaOk').classList.add('hidden');
+}
+
+// ========== FORM ==========
+async function doSubmit() {
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    const errEl = document.getElementById('error');
+    const btn = document.getElementById('submitBtn');
+    errEl.classList.add('hidden');
+
+    if (!email || !password) { showErr('请输入邮箱和密码'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showErr('请输入有效的邮箱地址'); return; }
+    if (!verified) { showErr('请先完成人机验证'); return; }
+    if (mode === 'register') {
+        if (password.length < 6) { showErr('密码至少 6 个字符'); return; }
+        if (password !== document.getElementById('confirmPassword').value) { showErr('两次密码不一致'); return; }
+    }
+
+    btn.disabled = true;
+    btn.textContent = mode === 'login' ? '登录中...' : '注册中...';
+
+    try {
+        const url = mode === 'login' ? '/api/auth/login' : '/api/auth/register';
+        const body = { email, password, captchaToken: verifiedToken };
+        if (mode === 'login') body.rememberMe = document.getElementById('rememberMe').checked;
+
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+            window.location.href = data.redirect;
+        } else {
+            showErr(data.error || (mode === 'login' ? '登录失败' : '注册失败'));
+            resetCaptcha();
+        }
+    } catch {
+        showErr('网络错误，请重试');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = mode === 'login' ? '登录' : '注册';
+    }
+}
+
+function showErr(msg) {
+    const el = document.getElementById('error');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+}
+
+// keyboard
+document.getElementById('email').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('password').focus(); });
+document.getElementById('password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { mode === 'register' ? document.getElementById('confirmPassword').focus() : doSubmit(); }
+});
+document.getElementById('confirmPassword').addEventListener('keydown', e => { if (e.key === 'Enter') doSubmit(); });
+
+// admin login page: hide register tab
+if (window.location.pathname.includes('sms_admin')) {
+    document.getElementById('tabRegister').style.display = 'none';
+}
+if (window.location.hash === '#register') switchTab('register');
+</script>
+</body>
+</html>

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>验证码查看</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .pulse-dot { animation: pulse-dot 1.5s infinite; }
+        @keyframes bounce-in { 0% { transform: scale(0.3); opacity: 0; } 50% { transform: scale(1.05); } 100% { transform: scale(1); opacity: 1; } }
+        .bounce-in { animation: bounce-in 0.5s ease-out; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center">
+    <div class="w-full max-w-md mx-4">
+        <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+            <!-- 头部 -->
+            <div class="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-5 text-white">
+                <h1 class="text-lg font-semibold">短信验证码</h1>
+                <p class="text-blue-100 text-sm mt-1">请等待验证码到达</p>
+            </div>
+
+            <div class="px-6 py-6">
+                <!-- 加载中 -->
+                <div id="loading" class="text-center py-8">
+                    <div class="animate-spin w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full mx-auto"></div>
+                    <p class="text-gray-400 mt-3 text-sm">加载中...</p>
+                </div>
+
+                <!-- 内容 -->
+                <div id="content" class="hidden space-y-4">
+                    <!-- 手机号 -->
+                    <div class="text-center">
+                        <div id="phoneNumber" class="text-2xl font-mono font-bold text-gray-800 tracking-wide"></div>
+                    </div>
+
+                    <!-- 服务信息 -->
+                    <div class="flex items-center justify-center gap-2">
+                        <span id="countryBadge" class="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded"></span>
+                        <span id="projectBadge" class="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded"></span>
+                        <span id="modeBadge" class="text-xs px-2 py-1 rounded hidden"></span>
+                    </div>
+
+                    <!-- 等待状态 -->
+                    <div id="waitingState" class="text-center py-6">
+                        <div class="pulse-dot inline-flex items-center justify-center w-16 h-16 bg-yellow-50 rounded-full mb-3">
+                            <svg class="w-8 h-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <p class="text-gray-500">等待验证码中...</p>
+                        <p class="text-gray-400 text-xs mt-1">每 5 秒自动刷新</p>
+                    </div>
+
+                    <!-- 一次性接码：已收到验证码 -->
+                    <div id="receivedState" class="hidden text-center py-4">
+                        <div class="bounce-in inline-flex items-center justify-center w-16 h-16 bg-green-50 rounded-full mb-3">
+                            <svg class="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="text-xs text-gray-400 mb-2">验证码</div>
+                            <div id="codeDisplay" class="text-5xl font-mono font-bold text-green-600 tracking-[0.3em]"></div>
+                        </div>
+
+                        <button onclick="copyCode()" id="copyBtn"
+                            class="mt-3 bg-green-500 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-green-600 active:scale-95 transition">
+                            点击复制验证码
+                        </button>
+
+                        <div id="smsBody" class="mt-4 text-xs text-gray-400 bg-gray-50 rounded-lg p-3 text-left"></div>
+                    </div>
+
+                    <!-- 租赁模式：短信列表（持续监听） -->
+                    <div id="rentalSmsState" class="hidden">
+                        <!-- 监听中提示 -->
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="pulse-dot inline-block w-2 h-2 bg-green-500 rounded-full"></span>
+                            <span class="text-xs text-gray-400">持续监听中，每 5 秒刷新</span>
+                        </div>
+
+                        <!-- 短信列表 -->
+                        <div id="smsListContainer" class="space-y-3 max-h-96 overflow-y-auto">
+                            <div class="text-center text-gray-400 text-sm py-4">暂无短信</div>
+                        </div>
+                    </div>
+
+                    <!-- 已取消 -->
+                    <div id="cancelledState" class="hidden text-center py-6">
+                        <div class="inline-flex items-center justify-center w-16 h-16 bg-red-50 rounded-full mb-3">
+                            <svg class="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </div>
+                        <p class="text-gray-500">此号码已取消</p>
+                    </div>
+                </div>
+
+                <!-- 未找到 -->
+                <div id="notFound" class="hidden text-center py-8">
+                    <p class="text-gray-400">未找到此订单</p>
+                </div>
+            </div>
+        </div>
+
+        <p class="text-center text-xs text-gray-300 mt-4">接码平台</p>
+    </div>
+
+    <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg text-sm z-50 hidden">
+        已复制到剪贴板
+    </div>
+
+    <script src="/js/share.js"></script>
+</body>
+</html>
