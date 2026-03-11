@@ -106,11 +106,11 @@ public class OrderService : IOrderService
             .FirstOrDefaultAsync(o => o.OrderId == orderId);
         if (order == null) return;
 
-        // 只添加新短信（按 ReceivedAt 判断）
-        var existingCount = order.SmsList.Count;
-        if (smsList.Count <= existingCount) return;
+        // 按 ReceivedAt 去重，只插入 DB 中不存在的短信
+        var existingTimes = order.SmsList.Select(s => s.ReceivedAt).ToHashSet();
+        var newMessages = smsList.Where(s => !existingTimes.Contains(s.ReceivedAt)).ToList();
+        if (newMessages.Count == 0) return;
 
-        var newMessages = smsList.Skip(existingCount).ToList();
         foreach (var sms in newMessages)
         {
             sms.Id = SnowflakeId.NextId();

@@ -66,7 +66,7 @@ public class BalanceService : IBalanceService
         _log.LogInformation("余额退款: UserId={UserId}, Amount={Amount}, Description={Description}", userId, amount, description);
     }
 
-    /// <summary>管理员充值</summary>
+    /// <summary>系统充值</summary>
     public async Task<bool> RechargeAsync(long userId, decimal amount, string? description, long operatorId)
     {
         var user = await _db.Users.FindAsync(userId);
@@ -80,13 +80,13 @@ public class BalanceService : IBalanceService
             UserId = userId,
             Amount = amount,
             Type = "recharge",
-            Description = description ?? $"管理员充值 ${amount:F2}",
+            Description = description ?? $"系统充值 ${amount:F2}",
             OperatorId = operatorId,
             CreatedAt = DateTime.Now
         });
 
         await _db.SaveChangesAsync();
-        _log.LogInformation("管理员充值: UserId={UserId}, Amount={Amount}, OperatorId={OperatorId}", userId, amount, operatorId);
+        _log.LogInformation("系统充值: UserId={UserId}, Amount={Amount}, OperatorId={OperatorId}", userId, amount, operatorId);
         return true;
     }
 
