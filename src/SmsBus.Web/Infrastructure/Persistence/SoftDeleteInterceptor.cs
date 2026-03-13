@@ -40,15 +40,7 @@ public class SoftDeleteInterceptor : SaveChangesInterceptor
             entity.IsDeleted = true;
             entity.DeletedAt = DateTime.Now;
 
-            // 级联软删除：Order 被软删除时，同时软删除关联的 OrderSms
-            if (entry.Entity is Order order)
-            {
-                foreach (var sms in order.SmsList)
-                {
-                    sms.IsDeleted = true;
-                    sms.DeletedAt = DateTime.Now;
-                }
-            }
+            // Order 和 OrderSms 不再使用软删除
         }
     }
 }

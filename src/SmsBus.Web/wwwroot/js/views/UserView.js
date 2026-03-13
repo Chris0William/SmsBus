@@ -43,26 +43,26 @@ const UserView = {
                                 <el-form label-position="top" size="default">
                                     <el-form-item label="选择国家">
                                         <el-select v-model="actCountry" style="width:100%" filterable placeholder="搜索国家..."
-                                            @change="actInfo=null">
-                                            <el-option v-for="c in allActCountries" :key="c.code"
+                                            @change="onActCountryChange">
+                                            <el-option v-for="c in actCountries" :key="c.code"
                                                 :label="c.name+' ['+c.code+']'" :value="c.code" />
                                         </el-select>
                                     </el-form-item>
-                                    <el-form-item label="选择服务">
+                                    <el-form-item v-if="actNeedService" label="选择服务">
                                         <el-select v-model="actService" style="width:100%" filterable placeholder="搜索服务..."
                                             @change="actInfo=null">
-                                            <el-option v-for="s in allActServices" :key="s.code"
-                                                :label="s.zh+' ('+s.name+')'" :value="s.code" />
+                                            <el-option v-for="s in actServices" :key="s.code"
+                                                :label="(svcZh(s.code)||s.name)+' ('+s.name+')'" :value="s.code" />
                                         </el-select>
                                     </el-form-item>
                                     <el-button type="primary" plain @click="queryActivation" style="width:100%">查询可用数量和价格</el-button>
                                     <div v-if="actInfo" style="margin-top:12px;padding:12px;background:#eff6ff;border-radius:8px">
                                         <p style="font-size:13px;color:#374151">可用: <strong>{{ actInfo.total }}</strong> 个</p>
-                                        <p style="font-size:13px;color:#374151">价格: <strong>\${{ actInfo.userPrice.toFixed(2) }}</strong>
+                                        <p style="font-size:13px;color:#374151">价格: <strong>\${{ actInfo.userPrice.toFixed(4) }}</strong>
                                             <span style="color:#6b7280;font-size:12px"> ≈ ¥{{ cny(actInfo.userPrice) }}</span>
                                         </p>
                                     </div>
-                                    <el-button v-if="actInfo" id="actBuyBtn" type="primary" @click="buyActivation"
+                                    <el-button v-if="actInfo" type="primary" @click="buyActivation"
                                         :disabled="actInfo.total<=0" :loading="actBuying" style="width:100%;margin-top:12px">
                                         {{ actInfo.total>0 ? '购买 $'+actInfo.userPrice.toFixed(2)+' ≈ ¥'+cny(actInfo.userPrice) : '无可用号码' }}
                                     </el-button>
@@ -121,12 +121,19 @@ const UserView = {
                                 <el-form label-position="top" size="default">
                                     <el-form-item label="国家">
                                         <el-select v-model="rentCountry" filterable placeholder="选择国家" style="width:100%"
-                                            @change="loadRentalServices">
-                                            <el-option v-for="c in rentalCountries" :key="c.code" :label="translateCountry(c.name)+' ('+c.code+')'" :value="c.code" />
+                                            @change="onRentCountryChange">
+                                            <el-option v-for="c in rentalCountries" :key="c.code" :label="c.name+' ('+c.code+')'" :value="c.code" />
+                                        </el-select>
+                                    </el-form-item>
+                                    <el-form-item v-if="rentNeedService" label="选择服务">
+                                        <el-select v-model="rentService" filterable placeholder="选择服务" style="width:100%"
+                                            @change="onRentConfigChange">
+                                            <el-option v-for="s in rentalServiceList" :key="s.code"
+                                                :label="(svcZh(s.code)||s.name)+' ('+s.name+') - '+s.count+'个'" :value="s.code" />
                                         </el-select>
                                     </el-form-item>
                                     <el-form-item label="订阅时长">
-                                        <el-radio-group v-model="rentMonths" @change="loadRentalServices" style="width:100%">
+                                        <el-radio-group v-model="rentMonths" @change="onRentConfigChange" style="width:100%">
                                             <el-radio-button :value="1">1个月</el-radio-button>
                                             <el-radio-button :value="3">3个月</el-radio-button>
                                             <el-radio-button :value="6">6个月</el-radio-button>
@@ -134,30 +141,18 @@ const UserView = {
                                         </el-radio-group>
                                     </el-form-item>
                                 </el-form>
-                                <div style="max-height:300px;overflow-y:auto;margin-top:8px">
-                                    <div v-for="s in rentalServiceList" :key="s.code"
-                                        style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;transition:all .2s"
-                                        @mouseenter="$event.currentTarget.style.borderColor='#3b82f6';$event.currentTarget.style.background='#f8fafc'"
-                                        @mouseleave="$event.currentTarget.style.borderColor='#e5e7eb';$event.currentTarget.style.background=''">
-                                        <div>
-                                            <span style="font-weight:500;font-size:14px">{{ svcZh(s.code) || s.name }}</span>
-                                            <span style="color:#9ca3af;font-size:12px;margin-left:4px">({{ s.name }})</span>
-                                            <span style="color:#d1d5db;font-size:12px;margin-left:4px">{{ s.count }}个</span>
-                                        </div>
-                                        <div style="display:flex;align-items:center;gap:8px">
-                                            <div style="text-align:right">
-                                                <div>
-                                                    <span style="font-weight:500;font-size:14px">\${{ s.totalPrice.toFixed(2) }}</span>
-                                                    <span style="color:#6b7280;font-size:12px"> ≈ ¥{{ cny(s.totalPrice) }}</span>
-                                                </div>
-                                                <div v-if="rentMonths>1" style="color:#9ca3af;font-size:11px">\${{ s.monthlyPrice.toFixed(2) }}/月</div>
-                                            </div>
-                                            <el-button type="primary" size="small" :disabled="s.count<=0"
-                                                @click="buyRental(s)">购买</el-button>
-                                        </div>
-                                    </div>
-                                    <el-empty v-if="rentalServiceList.length===0" description="请先选择国家" :image-size="60" />
+                                <div v-if="rentPriceInfo" style="padding:12px;background:#eff6ff;border-radius:8px;margin-top:8px">
+                                    <p style="font-size:13px;color:#374151">月价: <strong>\${{ rentPriceInfo.monthlyUserPrice.toFixed(4) }}</strong>
+                                        <span style="color:#6b7280;font-size:12px"> ≈ ¥{{ cny(rentPriceInfo.monthlyUserPrice) }}</span>
+                                    </p>
+                                    <p style="font-size:14px;color:#374151;margin-top:4px;font-weight:600">总价: \${{ rentPriceInfo.totalUserPrice.toFixed(4) }}
+                                        <span style="color:#6b7280;font-size:12px;font-weight:400"> ≈ ¥{{ cny(rentPriceInfo.totalUserPrice) }}</span>
+                                    </p>
                                 </div>
+                                <el-button v-if="rentPriceInfo" type="primary" @click="buyRental"
+                                    :loading="rentBuying" style="width:100%;margin-top:12px">
+                                    购买 \${{ rentPriceInfo.totalUserPrice.toFixed(2) }} ≈ ¥{{ cny(rentPriceInfo.totalUserPrice) }}
+                                </el-button>
                             </div>
                         </el-col>
                         <el-col :xs="24" :md="12">
@@ -168,7 +163,6 @@ const UserView = {
                                     <span style="font-size:13px;color:#6b7280">号码: </span>
                                     <span style="font-family:monospace;font-weight:600;font-size:16px;cursor:pointer" @click="copyText(rentData.number)">{{ rentData.number }}</span>
                                 </div>
-                                <p style="font-size:13px;color:#6b7280">订单号: {{ rentData.orderId }}</p>
                                 <p style="font-size:13px;color:#6b7280">总扣款: \${{ rentData.totalPrice.toFixed(2) }} ≈ ¥{{ cny(rentData.totalPrice) }}</p>
                                 <p v-if="rentData.months>1" style="font-size:12px;color:#9ca3af;margin-top:2px">{{ rentData.months }}个月</p>
                                 <div style="margin-top:12px;border-top:1px solid #e5e7eb;padding-top:12px">
@@ -201,30 +195,28 @@ const UserView = {
                             <el-button text type="primary" @click="loadOrders"><el-icon><Refresh /></el-icon> 刷新</el-button>
                         </div>
                         <el-empty v-if="orders.length===0" description="暂无订单" />
-                        <div v-for="o in orders" :key="o.orderId"
+                        <div v-for="o in orders" :key="o.id"
                             style="border:1px solid #e5e7eb;border-radius:10px;padding:16px;margin-bottom:12px;transition:all .2s"
                             @mouseenter="$event.currentTarget.style.boxShadow='0 2px 12px rgba(0,0,0,.06)'"
                             @mouseleave="$event.currentTarget.style.boxShadow=''">
                             <div style="display:flex;justify-content:space-between;align-items:start">
                                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                                     <el-tag :type="o.mode==='activation'?'':'warning'" size="small">{{ o.mode==='activation'?'临时':'租赁' }}</el-tag>
-                                    <span style="font-weight:500;font-size:14px">{{ o.serviceName }}</span>
-                                    <el-tag size="small">{{ o.countryName }}</el-tag>
+                                    <span style="font-weight:500;font-size:14px">{{ o.serviceName || o.serviceCode || '全服务' }}</span>
+                                    <el-tag size="small">{{ o.countryName || o.countryCode }}</el-tag>
                                     <el-tag :type="statusType(o.status)" size="small">{{ statusText(o.status) }}</el-tag>
                                     <span v-if="o.source==='admin'" style="color:#9ca3af;font-size:12px">(管理员分配)</span>
                                 </div>
                                 <span style="color:#9ca3af;font-size:12px;white-space:nowrap">{{ fmtTime(o.purchasedAt) }}</span>
                             </div>
                             <div style="margin-top:8px;font-size:13px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-                                <span style="font-family:monospace;cursor:pointer" @click="o.number&&copyText(o.number)">{{ o.number||'-' }}</span>
-                                <span style="color:#9ca3af">\${{ o.totalPrice.toFixed(2) }} ≈ ¥{{ cny(o.totalPrice) }}</span>
+                                <span style="font-family:monospace;cursor:pointer" @click="o.phoneNumber&&copyText(o.phoneNumber)">{{ o.phoneNumber||'-' }}</span>
+                                <span style="color:#9ca3af">\${{ (o.userPrice||0).toFixed(2) }} ≈ ¥{{ cny(o.userPrice||0) }}</span>
                             </div>
-                            <!-- 租赁订单信息：到期日期 + 订阅月数 -->
                             <div v-if="o.mode==='rental'" style="margin-top:6px;font-size:12px;color:#6b7280;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                                 <span v-if="o.expiresAt">到期: {{ fmtDate(o.expiresAt) }}</span>
-                                <span v-if="o.subscriptionMonths>1">· {{ o.subscriptionMonths }}个月</span>
+                                <span v-if="o.subscriptionMonths>1">· {{ o.subscriptionMonths }}个月 (已续{{ o.renewedCount||0 }}次)</span>
                             </div>
-                            <!-- 临时接码等待中：倒计时 + 等待动画 -->
                             <div v-if="o.mode==='activation'&&o.status==='waiting'" style="margin-top:8px">
                                 <p style="color:#3b82f6;font-size:13px">
                                     <span style="display:inline-block;width:6px;height:6px;background:#3b82f6;border-radius:50%;margin-right:4px;animation:pulse 1.5s infinite"></span>
@@ -234,19 +226,20 @@ const UserView = {
                                     </span>
                                 </p>
                             </div>
-                            <!-- 验证码显示 -->
-                            <div v-if="o.verificationCode" style="margin-top:8px;display:flex;align-items:center;gap:8px">
-                                <span style="font-family:monospace;font-size:22px;font-weight:700;color:#3b82f6;letter-spacing:3px;cursor:pointer"
-                                    @click="copyText(o.verificationCode)">{{ o.verificationCode }}</span>
-                                <el-button v-if="o.mode==='rental'&&o.smsList&&o.smsList.length>1" text type="primary" size="small"
-                                    @click="showSmsHistory(o.smsList)">历史 ({{ o.smsList.length }})</el-button>
+                            <!-- 短信列表 -->
+                            <div v-if="o.smsList&&o.smsList.length>0" style="margin-top:8px">
+                                <div v-for="sms in o.smsList.slice(0,1)" :key="sms.receivedAt" style="display:flex;align-items:center;gap:8px">
+                                    <span v-if="sms.code" style="font-family:monospace;font-size:22px;font-weight:700;color:#3b82f6;letter-spacing:3px;cursor:pointer"
+                                        @click="copyText(sms.code)">{{ sms.code }}</span>
+                                    <span v-else style="color:#6b7280;font-size:13px">{{ sms.text?.substring(0,50) }}</span>
+                                </div>
+                                <el-button v-if="o.smsList.length>1" text type="primary" size="small"
+                                    @click="showSmsHistory(o.smsList)" style="margin-top:4px">历史 ({{ o.smsList.length }})</el-button>
                             </div>
-                            <!-- 租赁刷新短信 -->
                             <div v-if="o.mode==='rental'" style="margin-top:6px;display:flex;align-items:center;gap:8px">
                                 <el-button text type="primary" size="small" @click="refreshOrderSms(o)">
                                     <el-icon><Refresh /></el-icon> 刷新短信
                                 </el-button>
-                                <!-- 续订按钮：到期前7天显示 -->
                                 <el-button v-if="daysUntilExpiry(o)<=7&&daysUntilExpiry(o)>=0" type="warning" size="small" @click="renewOrder(o)">
                                     续订
                                 </el-button>
@@ -254,10 +247,9 @@ const UserView = {
                                     即将到期
                                 </span>
                             </div>
-                            <!-- 操作按钮 -->
                             <div v-if="o.status==='waiting'" style="margin-top:8px;display:flex;gap:8px">
-                                <el-button type="danger" text size="small" @click="cancelOrder(o.orderId)">取消订单</el-button>
-                                <el-button type="primary" text size="small" @click="pollOrder(o.orderId)">刷新状态</el-button>
+                                <el-button type="danger" text size="small" @click="cancelOrder(o.id)">取消订单</el-button>
+                                <el-button type="primary" text size="small" @click="pollOrder(o.id)">刷新状态</el-button>
                             </div>
                         </div>
                     </div>
@@ -319,12 +311,13 @@ const UserView = {
             menuLabels: { activation: '临时接码', rental: '租赁', orders: '我的订单', transactions: '余额流水' },
             userPhone: '', userBalance: 0, usdCnyRate: 7.25,
             // Activation
-            actCountry: 'FR', actService: '', actInfo: null, actBuying: false,
+            actCountries: [], actCountry: '', actNeedService: true,
+            actServices: [], actService: '', actInfo: null, actBuying: false,
             actData: null, actCountdown: 0, actCountdownTimer: null,
-            actServices: [],
             // Rental
-            rentalCountries: [], rentCountry: '', rentMonths: 1,
-            rentalServiceList: [], rentData: null, rentSmsLoading: false,
+            rentalCountries: [], rentCountry: '', rentNeedService: true,
+            rentalServiceList: [], rentService: '', rentMonths: 1,
+            rentPriceInfo: null, rentData: null, rentSmsLoading: false, rentBuying: false,
             // Orders
             orders: [], orderTimerTick: 0, orderTickTimer: null,
             // Transactions
@@ -332,17 +325,6 @@ const UserView = {
             // SMS History Dialog
             smsHistoryVisible: false, smsHistoryList: []
         };
-    },
-
-    computed: {
-        allActCountries() { return ACT_COUNTRIES; },
-        allActServices() {
-            return this.actServices.map(s => ({
-                code: s.code,
-                name: s.name,
-                zh: svcZh(s.code) || s.name
-            }));
-        }
     },
 
     methods: {
@@ -363,7 +345,6 @@ const UserView = {
             if (index === 'rental' && this.rentalCountries.length === 0) this.loadRentalCountries();
         },
 
-        // === RMB Helper ===
         cny(usd) { return (usd * this.usdCnyRate).toFixed(2); },
 
         // === User Info ===
@@ -384,37 +365,48 @@ const UserView = {
         },
 
         // === Activation ===
-        async loadActServices() {
+        async loadActCountries() {
             try {
-                const res = await fetch('/api/services/activation/services');
-                const data = await res.json();
-                this.actServices = data;
-                if (!this.actService && data.length > 0) {
-                    const tiktok = data.find(s => s.code === 'opt104');
-                    this.actService = tiktok ? 'opt104' : data[0].code;
-                }
+                const res = await fetch('/api/countries?mode=activation');
+                this.actCountries = await res.json();
             } catch {}
         },
+        async onActCountryChange() {
+            this.actInfo = null;
+            this.actService = '';
+            this.actServices = [];
+            const c = this.actCountries.find(x => x.code === this.actCountry);
+            this.actNeedService = c ? c.requiresService : true;
+            if (this.actNeedService) {
+                try {
+                    const res = await fetch(`/api/countries/${this.actCountry}/services/activation`);
+                    const data = await res.json();
+                    this.actServices = data;
+                    if (data.length > 0) {
+                        const tiktok = data.find(s => s.code === 'opt104');
+                        this.actService = tiktok ? 'opt104' : data[0].code;
+                    }
+                } catch {}
+            }
+        },
         async queryActivation() {
-            const s = this.actService, c = this.actCountry;
-            if (!s || !c) return;
+            if (!this.actCountry) return;
+            const svc = this.actNeedService ? this.actService : '';
             try {
-                const res = await fetch(`/api/services/activation/count?service=${s}&country=${c}`);
+                const res = await fetch(`/api/countries/${this.actCountry}/activation/price?service=${svc}`);
                 const d = await res.json();
                 this.actInfo = { total: d.total, userPrice: d.userPrice };
+                if (d.usdCnyRate) this.usdCnyRate = d.usdCnyRate;
             } catch { ElementPlus.ElMessage.error('查询失败'); }
         },
         async buyActivation() {
             this.actBuying = true;
-            const c = ACT_COUNTRIES.find(x => x.code === this.actCountry);
-            const s = this.allActServices.find(x => x.code === this.actService);
             try {
                 const res = await fetch('/api/user/purchase/activation', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        serviceCode: this.actService, countryCode: this.actCountry,
-                        serviceName: s ? `${s.zh} (${s.name})` : this.actService,
-                        countryName: c?.name || this.actCountry
+                        countryCode: this.actCountry,
+                        serviceCode: this.actNeedService ? this.actService : null
                     })
                 });
                 const d = await res.json();
@@ -441,12 +433,13 @@ const UserView = {
                     }
                     if (d.status === 'received') {
                         this.clearCountdown();
-                        this.actData = { status: 'received', number: d.number, code: d.verificationCode || '-', orderId };
+                        const code = d.smsList?.[0]?.code || '-';
+                        this.actData = { status: 'received', number: d.phoneNumber, code, orderId };
                         return;
                     }
                     if (d.status === 'cancelled') {
                         this.clearCountdown();
-                        this.actData = { status: 'cancelled', number: d.number, code: null, orderId };
+                        this.actData = { status: 'cancelled', number: d.phoneNumber, code: null, orderId };
                         return;
                     }
                 } catch {}
@@ -458,55 +451,68 @@ const UserView = {
         // === Rental ===
         async loadRentalCountries() {
             try {
-                const res = await fetch('/api/services/rental/countries');
-                const list = await res.json();
-                const fr = list.findIndex(c => c.code === 'FR');
-                if (fr > 0) list.unshift(list.splice(fr, 1)[0]);
-                this.rentalCountries = list;
+                const res = await fetch('/api/countries?mode=rental');
+                this.rentalCountries = await res.json();
             } catch {}
         },
-        async loadRentalServices() {
-            if (!this.rentCountry) return;
-            try {
-                const res = await fetch(`/api/services/rental/services?country=${this.rentCountry}&dtype=month&dcount=1&months=${this.rentMonths}`);
-                const list = await res.json();
-                const tk = list.findIndex(s => s.code === 'opt104');
-                if (tk > 0) list.unshift(list.splice(tk, 1)[0]);
-                list.forEach(s => {
-                    s.monthlyPrice = s.userPrice;
-                    s.totalPrice = s.totalUserPrice;
-                });
-                this.rentalServiceList = list;
-            } catch { this.rentalServiceList = []; }
+        async onRentCountryChange() {
+            this.rentService = '';
+            this.rentalServiceList = [];
+            this.rentPriceInfo = null;
+            const c = this.rentalCountries.find(x => x.code === this.rentCountry);
+            this.rentNeedService = c ? c.requiresService : true;
+            if (this.rentNeedService) {
+                try {
+                    const res = await fetch(`/api/countries/${this.rentCountry}/services/rental`);
+                    const list = await res.json();
+                    const tk = list.findIndex(s => s.code === 'opt104');
+                    if (tk > 0) list.unshift(list.splice(tk, 1)[0]);
+                    this.rentalServiceList = list;
+                } catch {}
+            }
+            this.onRentConfigChange();
         },
-        async buyRental(s) {
+        async onRentConfigChange() {
+            if (!this.rentCountry) return;
+            const svc = this.rentNeedService ? this.rentService : '';
+            try {
+                const res = await fetch(`/api/countries/${this.rentCountry}/rental/price?service=${svc}&months=${this.rentMonths}`);
+                if (!res.ok) { this.rentPriceInfo = null; return; }
+                const d = await res.json();
+                if (d.error) { this.rentPriceInfo = null; return; }
+                this.rentPriceInfo = { monthlyUserPrice: d.monthlyUserPrice, totalUserPrice: d.totalUserPrice };
+                if (d.usdCnyRate) this.usdCnyRate = d.usdCnyRate;
+            } catch { this.rentPriceInfo = null; }
+        },
+        async buyRental() {
+            if (!this.rentPriceInfo) return;
+            const total = this.rentPriceInfo.totalUserPrice;
             const months = this.rentMonths;
-            const total = s.totalPrice;
-            const name = svcZh(s.code) || s.name;
-            const msg = `确认购买 ${name}（${months}个月），总价 $${total.toFixed(2)} (≈ ¥${this.cny(total)})？`;
+            const msg = `确认购买租赁（${months}个月），总价 $${total.toFixed(2)} (≈ ¥${this.cny(total)})？`;
             try {
                 await ElementPlus.ElMessageBox.confirm(msg, '确认购买',
                     { confirmButtonText: '确认', cancelButtonText: '取消', type: 'info' });
             } catch { return; }
+            this.rentBuying = true;
             try {
-                const sel = this.rentalCountries.find(c => c.code === this.rentCountry);
                 const res = await fetch('/api/user/purchase/rental', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        serviceCode: s.code, countryCode: this.rentCountry,
-                        countryName: translateCountry(sel?.name) || this.rentCountry, serviceName: name,
-                        dtype: 'month', dcount: 1, subscriptionMonths: months
+                        countryCode: this.rentCountry,
+                        serviceCode: this.rentNeedService ? this.rentService : null,
+                        months
                     })
                 });
                 const d = await res.json();
                 if (!res.ok) { ElementPlus.ElMessage.error(d.error || '购买失败'); return; }
                 ElementPlus.ElNotification({ title: '购买成功', message: `号码: ${d.number}`, type: 'success' });
                 this.rentData = {
-                    orderId: d.orderId, number: d.number || '', totalPrice: d.totalPrice,
+                    orderId: d.orderId, number: d.number || '', totalPrice: d.totalUserPrice || total,
                     months, latestCode: null, smsList: []
                 };
                 this.loadUserInfo();
             } catch (e) { ElementPlus.ElMessage.error('购买失败'); }
+            finally { this.rentBuying = false; }
         },
         async fetchRentSms(orderId) {
             this.rentSmsLoading = true;
@@ -548,7 +554,6 @@ const UserView = {
             if (d.deleted) { this.loadUserInfo(); }
             this.loadOrders();
         },
-        // 订单列表自动轮询（对waiting的临时订单）
         startOrderPolling() {
             this.stopOrderPolling();
             this.orderTickTimer = setInterval(() => {
@@ -556,7 +561,12 @@ const UserView = {
                 // 每10秒对waiting的临时订单自动poll
                 if (this.orderTimerTick % 10 === 0) {
                     const waitingActs = this.orders.filter(o => o.mode === 'activation' && o.status === 'waiting');
-                    waitingActs.forEach(o => this.pollOrder(o.orderId));
+                    waitingActs.forEach(o => this.pollOrder(o.id));
+                }
+                // 每30秒对active的租赁订单刷新短信
+                if (this.orderTimerTick % 30 === 0) {
+                    const activeRentals = this.orders.filter(o => o.mode === 'rental' && o.status === 'active');
+                    activeRentals.forEach(o => this.refreshOrderSms(o));
                 }
             }, 1000);
         },
@@ -564,31 +574,26 @@ const UserView = {
             if (this.orderTickTimer) { clearInterval(this.orderTickTimer); this.orderTickTimer = null; }
             this.orderTimerTick = 0;
         },
-        // 计算订单剩余秒数（依赖 orderTimerTick 驱动 Vue 响应式更新）
         orderCountdown(o) {
-            void this.orderTimerTick; // 触发响应式依赖
+            void this.orderTimerTick;
             const elapsed = (Date.now() - new Date(o.purchasedAt).getTime()) / 1000;
             return Math.max(0, Math.floor(600 - elapsed));
         },
-        // 计算到期剩余天数
         daysUntilExpiry(o) {
             if (!o.expiresAt) return 999;
             return Math.ceil((new Date(o.expiresAt).getTime() - Date.now()) / (1000*60*60*24));
         },
-        // 续订（重新购买延长原订单）
         async renewOrder(o) {
             try {
-                // 查询当前价格
-                const priceRes = await fetch(`/api/user/orders/${o.orderId}/renew-price?months=1`);
+                const priceRes = await fetch(`/api/user/orders/${o.id}/renew-price?months=1`);
                 const priceData = await priceRes.json();
                 if (!priceRes.ok) { ElementPlus.ElMessage.error(priceData.error || '查询价格失败'); return; }
 
-                const monthlyPrice = priceData.monthlyPrice;
+                const monthlyPrice = priceData.monthlyUserPrice;
                 const rate = priceData.usdCnyRate || this.usdCnyRate;
 
-                // 弹窗选择月数
                 const { value: monthsStr } = await ElementPlus.ElMessageBox.prompt(
-                    `续订 ${o.serviceName}\n\n月价: $${monthlyPrice.toFixed(2)} ≈ ¥${(monthlyPrice*rate).toFixed(2)}/月\n\n请输入续订月数 (1/3/6/12):`,
+                    `续订 ${o.serviceName||'全服务'}\n\n月价: $${monthlyPrice.toFixed(2)} ≈ ¥${(monthlyPrice*rate).toFixed(2)}/月\n\n请输入续订月数 (1/3/6/12):`,
                     '续订', {
                         confirmButtonText: '确认续订',
                         cancelButtonText: '取消',
@@ -601,11 +606,11 @@ const UserView = {
                 const total = monthlyPrice * months;
 
                 await ElementPlus.ElMessageBox.confirm(
-                    `确认续订 ${o.serviceName}（${months}个月），总价 $${total.toFixed(2)} (≈ ¥${(total*rate).toFixed(2)})？`,
+                    `确认续订（${months}个月），总价 $${total.toFixed(2)} (≈ ¥${(total*rate).toFixed(2)})？`,
                     '确认续订', { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' }
                 );
 
-                const res = await fetch(`/api/user/orders/${o.orderId}/renew`, {
+                const res = await fetch(`/api/user/orders/${o.id}/renew`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ months })
                 });
@@ -618,16 +623,13 @@ const UserView = {
         },
         async refreshOrderSms(o) {
             try {
-                const res = await fetch(`/api/user/orders/${o.orderId}/sms`);
+                const res = await fetch(`/api/user/orders/${o.id}/sms`);
                 const d = await res.json();
                 if (d.error) ElementPlus.ElMessage.warning(d.error);
                 if (d.messages && d.messages.length > 0) {
-                    ElementPlus.ElMessage.success('短信已刷新');
                     await this.loadOrders();
-                } else if (!d.error) {
-                    ElementPlus.ElMessage.info('暂无新短信');
                 }
-            } catch { ElementPlus.ElMessage.error('获取短信失败'); }
+            } catch {}
         },
 
         // === SMS History ===
@@ -678,15 +680,13 @@ const UserView = {
     beforeUnmount() {
         this.clearCountdown();
         this.stopOrderPolling();
+        window.removeEventListener('resize', this.checkMobile);
     },
 
     async mounted() {
         this.checkMobile();
         window.addEventListener('resize', this.checkMobile);
         await this.loadUserInfo();
-        this.loadActServices();
-    },
-    beforeUnmount() {
-        window.removeEventListener('resize', this.checkMobile);
+        this.loadActCountries();
     }
 };

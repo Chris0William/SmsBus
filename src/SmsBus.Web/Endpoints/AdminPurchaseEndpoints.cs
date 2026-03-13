@@ -1,6 +1,8 @@
+using Microsoft.EntityFrameworkCore;
+using SmsBus.Web.Data;
 using SmsBus.Web.Dto;
+using SmsBus.Web.Services;
 using SmsBus.Web.Services.Interfaces;
-using SmsPva.Sdk;
 
 using Order = SmsBus.Web.Entities.Order;
 
@@ -10,266 +12,200 @@ public static class AdminPurchaseEndpoints
 {
     public static void MapAdminPurchaseEndpoints(this WebApplication app)
     {
-        // --- 供应商信息 ---
-        app.MapGet("/api/userinfo", async (ISupplierService supplier) =>
+        // 管理员购买临时接码（不扣余额）
+        app.MapPost("/api/admin/purchase/activation", async (AdminActivationRequest req,
+            AppDbContext db, SupplierRouter router, IOrderService orders) =>
         {
-            var (bal, karma, name) = await supplier.GetUserInfoAsync();
-            return Results.Ok(new { Balance = bal, Karma = karma, Name = name });
-        });
+            var country = await db.Countries.Include(c => c.Supplier)
+                .FirstOrDefaultAsync(c => c.Code == req.CountryCode && c.IsActive);
+            if (country?.Supplier == null) return Results.Json(new { error = "国家不可用" }, statusCode: 400);
 
-        // --- 一次性接码 ---
-        app.MapGet("/api/activation/services", async (ISupplierService supplier) =>
-        {
-            try
-            {
-                var services = await supplier.GetActivationServicesAsync();
-                return Results.Ok(services.Select(s => new { s.Name, s.Code }));
-            }
-            catch
-            {
-                return Results.Ok(Array.Empty<object>());
-            }
-        });
-
-        app.MapGet("/api/activation/count", async (string service, string country, ISupplierService supplier) =>
-        {
-            try
-            {
-                var (total, price) = await supplier.GetActivationCountAsync(service, country);
-                return Results.Ok(new { total, price });
-            }
-            catch
-            {
-                return Results.Ok(new { total = 0, price = 0m });
-            }
-        });
-
-        app.MapPost("/api/activation/purchase", async (ActivationPurchaseRequest req, ISupplierService supplier, IOrderService orders) =>
-        {
-            var balBefore = (await supplier.GetUserInfoAsync()).Balance;
-            var number = await supplier.GetNumberAsync(req.ServiceCode, req.CountryCode);
-            var balAfter = (await supplier.GetUserInfoAsync()).Balance;
+            var supplier = router.Get(country.Supplier.Code);
+            var balBefore = await supplier.GetBalanceAsync();
+            var number = await supplier.GetNumberAsync(req.ServiceCode ?? "", country.Code);
+            var balAfter = await supplier.GetBalanceAsync();
             var actualCost = balBefore - balAfter;
 
-            var order = new Order
+            var order = await orders.CreateAsync(new Order
             {
-                OrderId = $"act_{number.Id}",
-                Number = number.Number,
-                CountryName = req.CountryName ?? req.CountryCode,
-                CountryCode = req.CountryCode,
-                ServiceName = req.ServiceName ?? req.ServiceCode,
+                SupplierId = country.SupplierId,
+                CountryId = country.Id,
+                Source = "admin",
+                PhoneNumber = number.FullNumber,
                 ServiceCode = req.ServiceCode,
-                CostPrice = actualCost > 0 ? actualCost : req.Price,
-                ListPrice = req.Price,
-                MarkupAmount = req.HiddenPrice,
-                TotalPrice = req.Price + req.HiddenPrice,
-                PurchasedAt = DateTime.Now,
-                Status = "waiting",
                 Mode = "activation",
-                Source = "admin",
-                ActivationNumberId = number.Id
-            };
+                Status = "waiting",
+                CostPrice = actualCost > 0 ? actualCost : 0,
+                UserPrice = 0,
+                SupplierOrderId = number.Id,
+                PurchasedAt = DateTime.Now
+            });
 
-            await orders.CreateAsync(order);
             return Results.Ok(new
             {
-                order.OrderId, order.Number, order.Mode, order.Status,
-                order.CostPrice, order.ListPrice, order.TotalPrice,
-                order.CountryName, order.ServiceName, order.PurchasedAt, order.ActivationNumberId
+                order.Id, order.PhoneNumber, order.Mode, order.Status,
+                order.CostPrice, countryName = country.Name, order.PurchasedAt
             });
         });
 
-        // --- 租赁 ---
-        app.MapGet("/api/rental/countries", async (ISupplierService supplier) =>
-            Results.Ok(await supplier.GetRentalCountriesAsync()));
-
-        app.MapGet("/api/rental/services", async (string country, string? dtype, int? dcount, ISupplierService supplier) =>
-            Results.Ok(await supplier.GetRentalServicesAsync(country, dtype, dcount)));
-
-        app.MapPost("/api/rental/purchase", async (RentalPurchaseRequest req, ISupplierService supplier, IOrderService orders) =>
+        // 管理员购买租赁号码（不扣余额）
+        app.MapPost("/api/admin/purchase/rental", async (AdminRentalRequest req,
+            AppDbContext db, SupplierRouter router, IOrderService orders) =>
         {
-            var balBefore = (await supplier.GetUserInfoAsync()).Balance;
-            var rental = await supplier.CreateRentalAsync(req.CountryCode, req.ServiceCode, req.Dtype, req.Dcount);
-            var balAfter = (await supplier.GetUserInfoAsync()).Balance;
+            var country = await db.Countries.Include(c => c.Supplier)
+                .FirstOrDefaultAsync(c => c.Code == req.CountryCode && c.IsActive);
+            if (country?.Supplier == null) return Results.Json(new { error = "国家不可用" }, statusCode: 400);
+
+            var supplier = router.Get(country.Supplier.Code);
+            var balBefore = await supplier.GetBalanceAsync();
+            var rental = await supplier.CreateRentalAsync(country.Code, req.ServiceCode);
+            var balAfter = await supplier.GetBalanceAsync();
             var actualCost = balBefore - balAfter;
 
-            var order = new Order
-            {
-                OrderId = $"rent_{rental.Id}",
-                Number = "+" + rental.CountryDigitCode + rental.PhoneNumber,
-                CountryName = req.CountryName ?? req.CountryCode,
-                CountryCode = req.CountryCode,
-                ServiceName = req.ServiceName ?? rental.ServiceName,
-                ServiceCode = req.ServiceCode,
-                CostPrice = actualCost > 0 ? actualCost : req.Price,
-                ListPrice = req.Price,
-                MarkupAmount = req.HiddenPrice,
-                TotalPrice = req.Price + req.HiddenPrice,
-                PurchasedAt = DateTime.Now,
-                Status = rental.StateText,
-                Mode = "rental",
-                Source = "admin",
-                RentalOrderId = rental.Id,
-                RentalDtype = req.Dtype,
-                RentalDcount = req.Dcount,
-                ExpiresAt = rental.ExpiresAt
-            };
+            try { await supplier.ActivateRentalAsync(rental.Id); } catch { }
 
-            await orders.CreateAsync(order);
+            var order = await orders.CreateAsync(new Order
+            {
+                SupplierId = country.SupplierId,
+                CountryId = country.Id,
+                Source = "admin",
+                PhoneNumber = rental.PhoneNumber.StartsWith("+") ? rental.PhoneNumber : "+" + rental.CountryDigitCode + rental.PhoneNumber,
+                ServiceCode = req.ServiceCode,
+                Mode = "rental",
+                Status = "active",
+                CostPrice = actualCost > 0 ? actualCost : 0,
+                UserPrice = 0,
+                SupplierOrderId = rental.Id,
+                ExpiresAt = rental.ExpiresAt,
+                PurchasedAt = DateTime.Now
+            });
+
             return Results.Ok(new
             {
-                order.OrderId, order.Number, order.Mode, order.Status,
-                order.CostPrice, order.ListPrice, order.TotalPrice,
-                order.CountryName, order.ServiceName, order.PurchasedAt, order.ExpiresAt, order.RentalOrderId
+                order.Id, order.PhoneNumber, order.Mode, order.Status,
+                order.CostPrice, countryName = country.Name, order.ExpiresAt, order.PurchasedAt
             });
         });
 
-        app.MapPost("/api/rental/activate/{orderId}", async (string orderId, SmsPvaClient client, IOrderService orders) =>
+        // 管理员手动续费
+        app.MapPost("/api/admin/orders/{id}/prolong", async (long id, SupplierRouter router, IOrderService orders) =>
         {
-            var order = await orders.GetByOrderIdAsync(orderId);
-            if (order?.RentalOrderId == null) return Results.NotFound();
-            await client.ActivateRentalAsync(order.RentalOrderId.Value);
-            await orders.UpdateStatusAsync(orderId, "activating");
-            return Results.Ok(new { status = "activating" });
-        });
+            var order = await orders.GetByIdAsync(id);
+            if (order == null || order.Mode != "rental") return Results.NotFound();
 
-        app.MapGet("/api/rental/sms/{orderId}", async (string orderId, SmsPvaClient client, IOrderService orders) =>
-        {
-            var order = await orders.GetByOrderIdAsync(orderId);
-            if (order?.RentalOrderId == null) return Results.NotFound();
-            // sms 方法只需 orderId
-            var messages = await client.ReadRentalSmsAsync(order.RentalOrderId.Value);
-            var smsList = messages.Select(m => new SmsBus.Web.Entities.OrderSms
-            {
-                Text = m.Text,
-                Code = SmsPvaClient.ExtractVerificationCode(m.Text),
-                ReceivedAt = m.ReceivedAt
-            }).ToList();
-            await orders.UpdateRentalSmsAsync(orderId, smsList);
-            return Results.Ok(new { messages = smsList.Select(s => new { s.Text, s.Code, s.ReceivedAt }) });
-        });
-
-        app.MapPost("/api/rental/prolong/{orderId}", async (string orderId, ProlongRequest req, SmsPvaClient client, ISupplierService supplier, IOrderService orders) =>
-        {
-            var order = await orders.GetByOrderIdAsync(orderId);
-            if (order?.RentalOrderId == null) return Results.NotFound();
-
-            var balBefore = (await supplier.GetUserInfoAsync()).Balance;
-            await client.ProlongRentalAsync(order.RentalOrderId.Value, req.Dtype, req.Dcount);
-            var balAfter = (await supplier.GetUserInfoAsync()).Balance;
+            var supplier = router.Get(order.Supplier!.Code);
+            var balBefore = await supplier.GetBalanceAsync();
+            await supplier.ProlongRentalAsync(order.SupplierOrderId);
+            var balAfter = await supplier.GetBalanceAsync();
             var renewCost = balBefore - balAfter;
 
-            var allOrders = await client.GetRentalOrdersAsync();
-            var updated = allOrders.FirstOrDefault(o => o.Id == order.RentalOrderId.Value);
-            if (updated != null) await orders.UpdateRentalInfoAsync(orderId, updated.ExpiresAt, updated.StateText);
-
+            var status = await supplier.GetRentalStatusAsync(order.SupplierOrderId);
+            if (status != null)
+                await orders.UpdateRentalInfoAsync(id, status.ExpiresAt, status.Status);
             if (renewCost > 0)
-                await orders.AccumulateCostAsync(orderId, renewCost);
+                await orders.AccumulateCostAsync(id, renewCost);
 
             return Results.Ok(new { success = true, renewCost });
         });
 
-        app.MapPost("/api/rental/delete/{orderId}", async (string orderId, SmsPvaClient client, IOrderService orders) =>
+        // 管理员读取租赁短信
+        app.MapGet("/api/admin/orders/{id}/sms", async (long id, SupplierRouter router, IOrderService orders) =>
         {
-            var order = await orders.GetByOrderIdAsync(orderId);
-            if (order?.RentalOrderId == null) return Results.NotFound();
-            await client.DeleteRentalAsync(order.RentalOrderId.Value);
-            await orders.UpdateStatusAsync(orderId, "cancelled");
-            return Results.Ok(new { success = true });
-        });
+            var order = await orders.GetByIdAsync(id);
+            if (order == null || order.Mode != "rental") return Results.NotFound();
 
-        // --- 订单管理 ---
-        app.MapGet("/api/orders", async (IOrderService orders) =>
-        {
-            var list = await orders.GetAllOrdersAsync();
-            return Results.Ok(list.Select(o => new
+            var supplier = router.Get(order.Supplier!.Code);
+            try
             {
-                o.Id, o.OrderId, o.Number, o.CountryName, o.CountryCode, o.ServiceName, o.ServiceCode,
-                o.Mode, o.Status, o.CostPrice, o.ListPrice, o.MarkupAmount, o.TotalPrice,
-                o.SmsContent, o.VerificationCode, o.PurchasedAt, o.ExpiresAt, o.Source, o.UserId,
-                o.RentalOrderId, o.ActivationNumberId, o.RentalDtype, o.RentalDcount,
-                o.SubscriptionMonths, o.SubscriptionRenewedCount, o.AutoSubscribe, o.NextRenewalAt, o.RenewalFailedAt,
-                userName = o.User?.Phone,
-                smsList = o.SmsList.Select(s => new { s.Text, s.Code, s.ReceivedAt })
-            }));
-        });
+                var messages = await supplier.ReadRentalSmsAsync(order.SupplierOrderId);
+                var smsList = messages.Select(m => new SmsBus.Web.Entities.OrderSms
+                {
+                    Text = m.Text, Code = m.Code, ReceivedAt = m.ReceivedAt
+                }).ToList();
+                await orders.UpdateRentalSmsAsync(id, smsList);
 
-        app.MapGet("/api/orders/{id}", async (string id, IOrderService orders) =>
-        {
-            var order = await orders.GetByOrderIdAsync(id);
-            if (order == null) return Results.NotFound();
-            return Results.Ok(new
+                var updated = await orders.GetByIdAsync(id);
+                return Results.Ok(new
+                {
+                    messages = updated!.SmsList.OrderByDescending(s => s.ReceivedAt)
+                        .Select(s => new { s.Text, s.Code, s.ReceivedAt })
+                });
+            }
+            catch (Exception ex)
             {
-                order.Id, order.OrderId, order.Number, order.CountryName, order.CountryCode,
-                order.ServiceName, order.ServiceCode, order.Mode, order.Status,
-                order.CostPrice, order.ListPrice, order.MarkupAmount, order.TotalPrice,
-                order.SmsContent, order.VerificationCode, order.PurchasedAt, order.ExpiresAt,
-                order.Source, order.UserId, order.RentalOrderId, order.ActivationNumberId,
-                order.RentalDtype, order.RentalDcount,
-                order.SubscriptionMonths, order.SubscriptionRenewedCount, order.AutoSubscribe, order.NextRenewalAt, order.RenewalFailedAt,
-                smsList = order.SmsList.Select(s => new { s.Text, s.Code, s.ReceivedAt })
-            });
+                return Results.Ok(new { messages = order.SmsList.Select(s => new { s.Text, s.Code, s.ReceivedAt }), error = ex.Message });
+            }
         });
 
-        app.MapGet("/api/orders/{id}/poll", async (string id, SmsPvaClient client, IOrderService orders) =>
+        // 管理员轮询订单
+        app.MapGet("/api/admin/orders/{id}/poll", async (long id, SupplierRouter router, IOrderService orders) =>
         {
-            var order = await orders.GetByOrderIdAsync(id);
+            var order = await orders.GetByIdAsync(id);
             if (order == null) return Results.NotFound();
 
-            if (order.Mode == "activation" && order.Status == "waiting" && order.ActivationNumberId != null)
+            var supplier = router.Get(order.Supplier!.Code);
+
+            if (order.Mode == "activation" && order.Status == "waiting")
             {
                 try
                 {
-                    var sms = await client.GetSmsAsync(order.ServiceCode!, order.CountryCode!, order.ActivationNumberId.Value);
+                    var sms = await supplier.GetSmsAsync(order.ServiceCode ?? "", order.Country!.Code, order.SupplierOrderId);
                     if (sms != null)
-                        await orders.UpdateSmsAsync(id, sms.Text, sms.Code ?? SmsPvaClient.ExtractVerificationCode(sms.Text));
+                        await orders.UpdateSmsAsync(id, sms.Text, sms.Code);
                 }
-                catch (SmsPva.Sdk.Exceptions.SmsPvaException ex) when (ex.Message.Contains("expired") || ex.Message.Contains("cancel"))
+                catch (Exception ex) when (ex.Message.Contains("expired") || ex.Message.Contains("cancel"))
                 {
                     await orders.UpdateStatusAsync(id, "expired");
                 }
                 catch { }
             }
 
-            if (order.Mode == "rental" && order.RentalOrderId != null)
+            if (order.Mode == "rental")
             {
                 try
                 {
-                    var allOrders = await client.GetRentalOrdersAsync();
-                    var ro = allOrders.FirstOrDefault(o => o.Id == order.RentalOrderId.Value);
-                    if (ro != null) await orders.UpdateRentalInfoAsync(id, ro.ExpiresAt, ro.StateText);
+                    var status = await supplier.GetRentalStatusAsync(order.SupplierOrderId);
+                    if (status != null)
+                        await orders.UpdateRentalInfoAsync(id, status.ExpiresAt, status.Status);
                 }
                 catch { }
             }
 
-            var updated = await orders.GetByOrderIdAsync(id);
+            var updated = await orders.GetByIdAsync(id);
             return Results.Ok(new
             {
-                updated!.Id, updated.OrderId, updated.Number, updated.CountryName, updated.CountryCode,
-                updated.ServiceName, updated.ServiceCode, updated.Mode, updated.Status,
-                updated.CostPrice, updated.ListPrice, updated.MarkupAmount, updated.TotalPrice,
-                updated.SmsContent, updated.VerificationCode, updated.PurchasedAt, updated.ExpiresAt,
-                updated.Source, updated.UserId, updated.RentalOrderId, updated.ActivationNumberId,
-                updated.RentalDtype, updated.RentalDcount,
-                updated.SubscriptionMonths, updated.SubscriptionRenewedCount, updated.AutoSubscribe, updated.NextRenewalAt, updated.RenewalFailedAt,
-                smsList = updated.SmsList.Select(s => new { s.Text, s.Code, s.ReceivedAt })
+                updated!.Id, updated.PhoneNumber, updated.Mode, updated.Status,
+                updated.CostPrice, updated.UserPrice, updated.ExpiresAt,
+                updated.SubscriptionMonths, updated.RenewedCount, updated.NextRenewalAt,
+                smsList = updated.SmsList.OrderByDescending(s => s.ReceivedAt)
+                    .Select(s => new { s.Text, s.Code, s.ReceivedAt })
             });
         });
 
-        app.MapPost("/api/orders/{id}/cancel", async (string id, SmsPvaClient client, IOrderService orders) =>
+        // 管理员取消订单
+        app.MapPost("/api/admin/orders/{id}/cancel", async (long id, SupplierRouter router, IOrderService orders) =>
         {
-            var order = await orders.GetByOrderIdAsync(id);
+            var order = await orders.GetByIdAsync(id);
             if (order == null) return Results.NotFound();
-            if (order.Mode == "activation" && order.ActivationNumberId != null)
+
+            var supplier = router.Get(order.Supplier!.Code);
+            if (order.Mode == "activation")
             {
-                try { await client.DenyNumberAsync(order.ServiceCode!, order.CountryCode!, order.ActivationNumberId.Value); }
+                try { await supplier.DenyNumberAsync(order.ServiceCode ?? "", order.Country!.Code, order.SupplierOrderId); }
                 catch { }
             }
+            if (order.Mode == "rental")
+            {
+                try { await supplier.DeleteRentalAsync(order.SupplierOrderId); }
+                catch { }
+            }
+
             await orders.UpdateStatusAsync(id, "cancelled");
             return Results.Ok(new { success = true });
         });
 
-        app.MapPost("/api/orders/{id}/remove", async (string id, IOrderService orders) =>
+        // 管理员删除订单
+        app.MapPost("/api/admin/orders/{id}/remove", async (long id, IOrderService orders) =>
         {
             await orders.DeleteOrderAsync(id);
             return Results.Ok(new { success = true });

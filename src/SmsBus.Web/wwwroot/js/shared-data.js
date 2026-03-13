@@ -1,25 +1,7 @@
-// === 共享数据: 国家列表、服务列表、翻译映射 ===
-
-const ACT_COUNTRIES = [
-    {code:'FR',name:'法国'},
-    {code:'US',name:'美国'},{code:'UK',name:'英国'},{code:'CA',name:'加拿大'},
-    {code:'DE',name:'德国'},{code:'ES',name:'西班牙'},
-    {code:'IT',name:'意大利'},{code:'NL',name:'荷兰'},{code:'SE',name:'瑞典'},
-    {code:'PL',name:'波兰'},{code:'RO',name:'罗马尼亚'},{code:'CZ',name:'捷克'},
-    {code:'PT',name:'葡萄牙'},{code:'AT',name:'奥地利'},{code:'BE',name:'比利时'},
-    {code:'RU',name:'俄罗斯'},{code:'UA',name:'乌克兰'},{code:'KZ',name:'哈萨克斯坦'},
-    {code:'CN',name:'中国'},{code:'HK',name:'香港'},{code:'TW',name:'台湾'},
-    {code:'JP',name:'日本'},{code:'KR',name:'韩国'},{code:'IN',name:'印度'},
-    {code:'ID',name:'印尼'},{code:'PH',name:'菲律宾'},{code:'TH',name:'泰国'},
-    {code:'VN',name:'越南'},{code:'MY',name:'马来西亚'},{code:'MX',name:'墨西哥'},
-    {code:'BR',name:'巴西'},{code:'AR',name:'阿根廷'},{code:'CO',name:'哥伦比亚'},
-    {code:'CL',name:'智利'},{code:'AU',name:'澳大利亚'},{code:'NZ',name:'新西兰'},
-    {code:'TR',name:'土耳其'},{code:'EG',name:'埃及'},{code:'NG',name:'尼日利亚'},
-    {code:'ZA',name:'南非'},{code:'IL',name:'以色列'},{code:'AE',name:'阿联酋'}
-];
+// === 共享数据: 服务翻译、国家翻译 ===
+// 国家列表现从 API /api/countries 动态加载，不再硬编码
 
 // 服务代码→中文翻译映射（一次性接码 + 长期租赁通用）
-// 一次性接码服务列表从 SMSPVA API 动态获取
 const SERVICE_ZH = {
     // === 一次性接码（代码来自 SMSPVA get_services API）===
     'opt1':'谷歌/Gmail','opt2':'脸书','opt5':'OK社交','opt10':'AOL邮箱',

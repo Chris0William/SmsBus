@@ -11,6 +11,7 @@ public class LongJsonConverter : JsonConverter<long>
 {
     public override long Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
+        if (reader.TokenType == JsonTokenType.Null) return 0;
         return reader.TokenType == JsonTokenType.String
             ? long.Parse(reader.GetString()!)
             : reader.GetInt64();

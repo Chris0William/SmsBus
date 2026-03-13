@@ -1,6 +1,8 @@
+using Microsoft.EntityFrameworkCore;
 using SmsBus.Web.Data;
 using SmsBus.Web.Dto;
 using SmsBus.Web.Infrastructure.Auth;
+using SmsBus.Web.Services;
 using SmsBus.Web.Services.Interfaces;
 
 using Order = SmsBus.Web.Entities.Order;
@@ -11,297 +13,273 @@ public static class PurchaseEndpoints
 {
     public static void MapPurchaseEndpoints(this WebApplication app)
     {
+        // 用户购买临时接码
         app.MapPost("/api/user/purchase/activation", async (UserActivationRequest req, HttpContext ctx,
-            ISupplierService supplier, IPricingService pricing, IBalanceService balance, IOrderService orders) =>
+            AppDbContext db, SupplierRouter router, IPricingService pricing, IBalanceService balance, IOrderService orders) =>
         {
             var session = (SessionData)ctx.Items["_session"]!;
+            var country = await db.Countries.Include(c => c.Supplier)
+                .FirstOrDefaultAsync(c => c.Code == req.CountryCode && c.IsActive && c.ActivationEnabled);
+            if (country?.Supplier == null) return Results.Json(new { error = "国家不可用" }, statusCode: 400);
+
+            var supplier = router.Get(country.Supplier.Code);
             var config = await pricing.GetConfigAsync();
 
-            var (_, costPrice) = await supplier.GetActivationCountAsync(req.ServiceCode, req.CountryCode);
-            var markup = pricing.CalcMarkup(config, costPrice, "activation");
-            var totalPrice = costPrice + markup;
+            var (_, costPrice) = await supplier.GetActivationCountAsync(req.ServiceCode ?? "", country.Code);
+            var userPrice = pricing.CalcUserPrice(costPrice, "activation", 1, country, config);
 
-            if (!await balance.HasSufficientBalanceAsync(session.UserId, totalPrice))
-                return Results.Json(new { success = false, error = $"余额不足，需要 ${totalPrice:F2}" }, statusCode: 400);
+            if (!await balance.HasSufficientBalanceAsync(session.UserId, userPrice))
+                return Results.Json(new { error = $"余额不足，需要 ${userPrice:F4}" }, statusCode: 400);
 
-            var balBefore = (await supplier.GetUserInfoAsync()).Balance;
-            var number = await supplier.GetNumberAsync(req.ServiceCode, req.CountryCode);
-            var balAfter = (await supplier.GetUserInfoAsync()).Balance;
+            var balBefore = await supplier.GetBalanceAsync();
+            var number = await supplier.GetNumberAsync(req.ServiceCode ?? "", country.Code);
+            var balAfter = await supplier.GetBalanceAsync();
             var actualCost = balBefore - balAfter;
 
             var order = await orders.CreateAsync(new Order
             {
-                OrderId = $"act_{number.Id}",
                 UserId = session.UserId,
+                SupplierId = country.SupplierId,
+                CountryId = country.Id,
                 Source = "user",
-                Number = number.Number,
-                CountryCode = req.CountryCode,
-                CountryName = req.CountryName ?? req.CountryCode,
+                PhoneNumber = number.FullNumber,
                 ServiceCode = req.ServiceCode,
-                ServiceName = req.ServiceName ?? req.ServiceCode,
                 Mode = "activation",
                 Status = "waiting",
                 CostPrice = actualCost > 0 ? actualCost : costPrice,
-                ListPrice = costPrice,
-                MarkupAmount = markup,
-                TotalPrice = totalPrice,
-                ActivationNumberId = number.Id,
+                UserPrice = userPrice,
+                SupplierOrderId = number.Id,
                 PurchasedAt = DateTime.Now
             });
 
-            await balance.DeductAsync(session.UserId, totalPrice,
-                $"购买临时接码 {req.ServiceName ?? req.ServiceCode}", order.Id);
+            await balance.DeductAsync(session.UserId, userPrice,
+                $"购买临时接码 {req.ServiceCode}", order.Id);
 
-            return Results.Ok(new { success = true, orderId = order.OrderId, totalPrice, number = order.Number });
+            return Results.Ok(new { success = true, orderId = order.Id, userPrice, number = order.PhoneNumber });
         });
 
+        // 用户购买租赁号码
         app.MapPost("/api/user/purchase/rental", async (UserRentalRequest req, HttpContext ctx,
-            ISupplierService supplier, IPricingService pricing, IBalanceService balance, IOrderService orders) =>
+            AppDbContext db, SupplierRouter router, IPricingService pricing, IBalanceService balance, IOrderService orders) =>
         {
             var session = (SessionData)ctx.Items["_session"]!;
+            var country = await db.Countries.Include(c => c.Supplier)
+                .FirstOrDefaultAsync(c => c.Code == req.CountryCode && c.IsActive && c.RentalEnabled);
+            if (country?.Supplier == null) return Results.Json(new { error = "国家不可用" }, statusCode: 400);
+
+            var supplier = router.Get(country.Supplier.Code);
             var config = await pricing.GetConfigAsync();
+            var subMonths = req.Months > 0 ? req.Months : 1;
 
-            // 查询1个月价格
-            var services = await supplier.GetRentalServicesAsync(req.CountryCode, "month", 1);
-            var svc = services.FirstOrDefault(s => s.Code == req.ServiceCode);
-            if (svc == null) return Results.Json(new { success = false, error = "服务不可用" }, statusCode: 400);
+            // 查询月租成本价
+            var price = await supplier.GetRentalPriceAsync(country.Code, req.ServiceCode);
+            var monthlyUserPrice = pricing.CalcUserPrice(price.MonthlyCostUsd, "rental", subMonths, country, config);
+            var totalUserPrice = monthlyUserPrice * subMonths;
 
-            var subMonths = req.SubscriptionMonths > 0 ? req.SubscriptionMonths : 1;
-            var monthlyCost = svc.Price * 30;
-            var totalCost = monthlyCost * subMonths;
-            var totalMarkup = pricing.CalcMarkup(config, totalCost, "rental", subMonths);
-            var totalPrice = totalCost + totalMarkup;
-
-            if (!await balance.HasSufficientBalanceAsync(session.UserId, totalPrice))
-                return Results.Json(new { success = false, error = $"余额不足，需要 ${totalPrice:F2}" }, statusCode: 400);
+            if (!await balance.HasSufficientBalanceAsync(session.UserId, totalUserPrice))
+                return Results.Json(new { error = $"余额不足，需要 ${totalUserPrice:F4}" }, statusCode: 400);
 
             // 上游只买1个月
-            var balBefore = (await supplier.GetUserInfoAsync()).Balance;
-            var rental = await supplier.CreateRentalAsync(req.CountryCode, req.ServiceCode, "month", 1);
-            var balAfter = (await supplier.GetUserInfoAsync()).Balance;
+            var balBefore = await supplier.GetBalanceAsync();
+            var rental = await supplier.CreateRentalAsync(country.Code, req.ServiceCode);
+            var balAfter = await supplier.GetBalanceAsync();
             var actualCost = balBefore - balAfter;
 
-            // 自动激活租赁号码
             try { await supplier.ActivateRentalAsync(rental.Id); } catch { /* 部分号码无需激活 */ }
 
             var order = await orders.CreateAsync(new Order
             {
-                OrderId = $"rent_{rental.Id}",
                 UserId = session.UserId,
+                SupplierId = country.SupplierId,
+                CountryId = country.Id,
                 Source = "user",
-                Number = "+" + rental.CountryDigitCode + rental.PhoneNumber,
-                CountryCode = req.CountryCode,
-                CountryName = req.CountryName ?? req.CountryCode,
+                PhoneNumber = rental.PhoneNumber.StartsWith("+") ? rental.PhoneNumber : "+" + rental.CountryDigitCode + rental.PhoneNumber,
                 ServiceCode = req.ServiceCode,
-                ServiceName = req.ServiceName ?? rental.ServiceName,
+                ServiceName = price.ServiceName,
                 Mode = "rental",
-                Status = "activating",
-                CostPrice = actualCost > 0 ? actualCost : totalCost,
-                ListPrice = totalCost,
-                MarkupAmount = totalMarkup,
-                TotalPrice = totalPrice,
-                RentalOrderId = rental.Id,
-                RentalDtype = "month",
-                RentalDcount = 1,
+                Status = "active",
+                CostPrice = actualCost > 0 ? actualCost : price.MonthlyCostUsd,
+                UserPrice = totalUserPrice,
+                SupplierOrderId = rental.Id,
                 ExpiresAt = rental.ExpiresAt,
                 SubscriptionMonths = subMonths,
-                SubscriptionRenewedCount = 0,
-                AutoSubscribe = subMonths > 1,
+                RenewedCount = 0,
                 NextRenewalAt = subMonths > 1 ? rental.ExpiresAt.AddDays(-2) : null,
                 PurchasedAt = DateTime.Now
             });
 
-            await balance.DeductAsync(session.UserId, totalPrice,
-                $"购买租赁 {req.ServiceName ?? req.ServiceCode} ({subMonths}个月)", order.Id);
+            await balance.DeductAsync(session.UserId, totalUserPrice,
+                $"购买租赁 {price.ServiceName} ({subMonths}个月)", order.Id);
 
-            return Results.Ok(new { success = true, orderId = order.OrderId, totalPrice, number = order.Number });
+            return Results.Ok(new { success = true, orderId = order.Id, totalUserPrice, number = order.PhoneNumber });
         });
 
-        // 用户获取租赁订单短信
-        app.MapGet("/api/user/orders/{orderId}/sms", async (string orderId, HttpContext ctx,
-            IOrderService orders, ISupplierService supplier, SmsPva.Sdk.SmsPvaClient client,
-            ILoggerFactory logFactory) =>
+        // 获取租赁订单短信
+        app.MapGet("/api/user/orders/{id:long}/sms", async (long id, HttpContext ctx,
+            AppDbContext db, IOrderService orders, SupplierRouter router) =>
         {
             var session = (SessionData)ctx.Items["_session"]!;
-            var order = await orders.GetByOrderIdAsync(orderId);
+            var order = await orders.GetByIdAsync(id);
             if (order == null || order.UserId != session.UserId) return Results.NotFound();
-            if (order.Mode != "rental" || order.RentalOrderId == null)
+            if (order.Mode != "rental")
                 return Results.Json(new { error = "仅租赁订单支持此操作" }, statusCode: 400);
 
-            var log = logFactory.CreateLogger("RentalSms");
+            var supplier = router.Get(order.Supplier!.Code);
 
-            // 同步订单状态
+            // 同步状态
             try
             {
-                var allRentals = await supplier.GetRentalOrdersAsync();
-                var ro = allRentals.FirstOrDefault(r => r.Id == order.RentalOrderId);
-                if (ro != null)
-                    await orders.UpdateRentalInfoAsync(orderId, ro.ExpiresAt, ro.StateText);
+                var status = await supplier.GetRentalStatusAsync(order.SupplierOrderId);
+                if (status != null)
+                    await orders.UpdateRentalInfoAsync(id, status.ExpiresAt, status.Status);
             }
-            catch (Exception ex) { log.LogWarning(ex, "同步租赁状态失败: {OrderId}", orderId); }
+            catch { }
 
+            // 读取短信
             try
             {
-                var messages = await client.ReadRentalSmsAsync(order.RentalOrderId.Value);
+                var messages = await supplier.ReadRentalSmsAsync(order.SupplierOrderId);
                 var smsList = messages.Select(m => new SmsBus.Web.Entities.OrderSms
                 {
                     Text = m.Text,
-                    Code = SmsPva.Sdk.SmsPvaClient.ExtractVerificationCode(m.Text),
+                    Code = m.Code,
                     ReceivedAt = m.ReceivedAt
                 }).ToList();
-                await orders.UpdateRentalSmsAsync(orderId, smsList);
+                await orders.UpdateRentalSmsAsync(id, smsList);
+
+                // 重新查询获取完整列表
+                var updated = await orders.GetByIdAsync(id);
                 return Results.Ok(new
                 {
-                    messages = smsList.Select(s => new { s.Text, s.Code, s.ReceivedAt })
+                    messages = updated!.SmsList.OrderByDescending(s => s.ReceivedAt)
+                        .Select(s => new { s.Text, s.Code, s.ReceivedAt })
                 });
             }
             catch (Exception ex)
             {
-                log.LogError(ex, "获取租赁短信失败: {OrderId}", orderId);
                 var existing = order.SmsList?.Select(s => new { s.Text, s.Code, s.ReceivedAt }) ?? [];
                 return Results.Ok(new { messages = existing, error = "获取上游短信失败: " + ex.Message });
             }
         });
 
-        // 取消订单 + 临时接码自动退款并删除
-        app.MapPost("/api/user/orders/{orderId}/cancel", async (string orderId, HttpContext ctx,
-            ISupplierService supplier, IBalanceService balance, IOrderService orders) =>
+        // 轮询临时接码状态
+        app.MapGet("/api/user/orders/{id:long}/poll", async (long id, HttpContext ctx,
+            IOrderService orders, SupplierRouter router, IBalanceService balance, AppDbContext db) =>
         {
             var session = (SessionData)ctx.Items["_session"]!;
-            var order = await orders.GetByOrderIdAsync(orderId);
-            if (order == null || order.UserId != session.UserId)
-                return Results.NotFound();
+            var order = await orders.GetByIdAsync(id);
+            if (order == null || order.UserId != session.UserId) return Results.NotFound();
+
+            if (order.Mode == "activation" && order.Status == "waiting")
+            {
+                var supplier = router.Get(order.Supplier!.Code);
+                try
+                {
+                    var sms = await supplier.GetSmsAsync(order.ServiceCode ?? "", order.Country!.Code, order.SupplierOrderId);
+                    if (sms != null)
+                        await orders.UpdateSmsAsync(id, sms.Text, sms.Code);
+                }
+                catch (Exception ex) when (ex.Message.Contains("expired") || ex.Message.Contains("cancel") || ex.Message.Contains("过期"))
+                {
+                    await orders.UpdateStatusAsync(id, "expired");
+                    if (order.UserId != null && order.UserPrice > 0)
+                        await balance.RefundAsync(order.UserId.Value, order.UserPrice,
+                            $"临时接码过期自动退款", order.Id);
+                    await orders.DeleteOrderAsync(id);
+                    return Results.Ok(new { orderId = id, status = "expired", deleted = true });
+                }
+                catch { }
+            }
+
+            order = await orders.GetByIdAsync(id);
+            if (order == null) return Results.Ok(new { orderId = id, status = "expired", deleted = true });
+            return Results.Ok(new
+            {
+                order.Id, order.Status, order.PhoneNumber, order.ExpiresAt,
+                smsList = order.SmsList.Select(s => new { s.Text, s.Code, s.ReceivedAt })
+            });
+        });
+
+        // 取消订单
+        app.MapPost("/api/user/orders/{id:long}/cancel", async (long id, HttpContext ctx,
+            IOrderService orders, SupplierRouter router, IBalanceService balance) =>
+        {
+            var session = (SessionData)ctx.Items["_session"]!;
+            var order = await orders.GetByIdAsync(id);
+            if (order == null || order.UserId != session.UserId) return Results.NotFound();
 
             if (order.Status != "waiting")
-                return Results.Json(new { success = false, error = "仅等待中的订单可取消" }, statusCode: 400);
+                return Results.Json(new { error = "仅等待中的订单可取消" }, statusCode: 400);
 
-            if (order.Mode == "activation" && order.ActivationNumberId != null)
-            {
-                try { await supplier.DenyNumberAsync(order.ServiceCode!, order.CountryCode!, order.ActivationNumberId.Value); }
-                catch { /* 忽略 */ }
-            }
-
-            // 全额退款
-            if (order.TotalPrice > 0)
-                await balance.RefundAsync(session.UserId, order.TotalPrice, $"取消订单退款 {orderId}", order.Id);
-
-            // 临时接码订单直接删除（不显示给用户）
+            var supplier = router.Get(order.Supplier!.Code);
             if (order.Mode == "activation")
             {
-                await orders.DeleteOrderAsync(orderId);
+                try { await supplier.DenyNumberAsync(order.ServiceCode ?? "", order.Country!.Code, order.SupplierOrderId); }
+                catch { }
             }
+
+            if (order.UserPrice > 0)
+                await balance.RefundAsync(session.UserId, order.UserPrice, $"取消订单退款", order.Id);
+
+            if (order.Mode == "activation")
+                await orders.DeleteOrderAsync(id);
             else
-            {
-                await orders.UpdateStatusAsync(orderId, "cancelled");
-            }
+                await orders.UpdateStatusAsync(id, "cancelled");
 
             return Results.Ok(new { success = true });
         });
 
-        // 轮询订单状态（临时接码）
-        app.MapGet("/api/user/orders/{orderId}/poll", async (string orderId, HttpContext ctx,
-            ISupplierService supplier, IBalanceService balance, IOrderService orders) =>
+        // 续订租赁
+        app.MapPost("/api/user/orders/{id:long}/renew", async (long id, RenewRequest req, HttpContext ctx,
+            IOrderService orders, IPricingService pricing, SupplierRouter router, IBalanceService balance, AppDbContext db) =>
         {
             var session = (SessionData)ctx.Items["_session"]!;
-            var order = await orders.GetByOrderIdAsync(orderId);
-            if (order == null || order.UserId != session.UserId)
-                return Results.NotFound();
-
-            if (order.Mode == "activation" && order.Status == "waiting" && order.ActivationNumberId != null)
-            {
-                try
-                {
-                    var sms = await supplier.GetSmsAsync(order.ServiceCode!, order.CountryCode!, order.ActivationNumberId.Value);
-                    if (sms != null)
-                        await orders.UpdateSmsAsync(orderId, sms.Value.Text!, sms.Value.Code);
-                }
-                catch (SmsPva.Sdk.Exceptions.SmsPvaException ex) when (ex.Message.Contains("expired") || ex.Message.Contains("cancel") || ex.Message.Contains("过期"))
-                {
-                    // 过期：全额退款 + 删除订单
-                    await orders.UpdateStatusAsync(orderId, "expired");
-                    if (order.UserId != null && order.TotalPrice > 0)
-                        await balance.RefundAsync(order.UserId.Value, order.TotalPrice,
-                            $"临时接码过期自动退款 {orderId}", order.Id);
-                    await orders.DeleteOrderAsync(orderId);
-                    return Results.Ok(new { orderId, status = "expired", deleted = true });
-                }
-                catch { /* 等待中 */ }
-            }
-
-            order = await orders.GetByOrderIdAsync(orderId);
-            if (order == null) return Results.Ok(new { orderId, status = "expired", deleted = true });
-            return Results.Ok(new
-            {
-                order.OrderId, order.Status, order.SmsContent, order.VerificationCode,
-                order.Number, order.ExpiresAt
-            });
-        });
-
-        // 续订（重新购买延长原订单）
-        app.MapPost("/api/user/orders/{orderId}/renew", async (string orderId, RenewRequest req, HttpContext ctx,
-            IOrderService orders, IPricingService pricing, ISupplierService supplier,
-            IBalanceService balance, AppDbContext db) =>
-        {
-            var session = (SessionData)ctx.Items["_session"]!;
-            var order = await orders.GetByOrderIdAsync(orderId);
+            var order = await orders.GetByIdAsync(id);
             if (order == null || order.UserId != session.UserId) return Results.NotFound();
             if (order.Mode != "rental")
                 return Results.Json(new { error = "仅租赁订单支持续订" }, statusCode: 400);
             if (req.Months < 1 || req.Months > 12)
                 return Results.Json(new { error = "续订月数无效" }, statusCode: 400);
 
+            var supplier = router.Get(order.Supplier!.Code);
             var config = await pricing.GetConfigAsync();
-            var services = await supplier.GetRentalServicesAsync(order.CountryCode!, "month", 1);
-            var svc = services.FirstOrDefault(s => s.Code == order.ServiceCode);
-            if (svc == null) return Results.Json(new { error = "服务暂不可用" }, statusCode: 400);
+            var price = await supplier.GetRentalPriceAsync(order.Country!.Code, order.ServiceCode);
+            var monthlyUserPrice = pricing.CalcUserPrice(price.MonthlyCostUsd, "rental", req.Months, order.Country, config);
+            var totalUserPrice = monthlyUserPrice * req.Months;
 
-            var monthlyCost = svc.Price * 30;
-            var totalCost = monthlyCost * req.Months;
-            var totalMarkup = pricing.CalcMarkup(config, totalCost, "rental", req.Months);
-            var totalPrice = totalCost + totalMarkup;
+            if (!await balance.HasSufficientBalanceAsync(session.UserId, totalUserPrice))
+                return Results.Json(new { error = $"余额不足，需要 ${totalUserPrice:F4}" }, statusCode: 400);
 
-            if (!await balance.HasSufficientBalanceAsync(session.UserId, totalPrice))
-                return Results.Json(new { error = $"余额不足，需要 ${totalPrice:F2}" }, statusCode: 400);
-
-            await balance.DeductAsync(session.UserId, totalPrice,
+            await balance.DeductAsync(session.UserId, totalUserPrice,
                 $"续订 {order.ServiceName} {req.Months}个月", order.Id);
 
-            // 延长原订单（CostPrice 由后台实际续费时通过 balance-diff 累加）
-            order.SubscriptionMonths = (order.SubscriptionMonths ?? 1) + req.Months;
-            order.AutoSubscribe = true;
-            order.ListPrice += totalCost;
-            order.MarkupAmount += totalMarkup;
-            order.TotalPrice += totalPrice;
-            // 如果之前自动续费已停止，重新设置 NextRenewalAt
-            if (order.NextRenewalAt == null && order.ExpiresAt != null)
-                order.NextRenewalAt = order.ExpiresAt.Value.AddDays(-2);
-
+            var dbOrder = await db.Orders.FindAsync(id);
+            dbOrder!.SubscriptionMonths = (dbOrder.SubscriptionMonths ?? 1) + req.Months;
+            dbOrder.UserPrice += totalUserPrice;
+            if (dbOrder.NextRenewalAt == null && dbOrder.ExpiresAt != null)
+                dbOrder.NextRenewalAt = dbOrder.ExpiresAt.Value.AddDays(-2);
             await db.SaveChangesAsync();
-            return Results.Ok(new { success = true, subscriptionMonths = order.SubscriptionMonths, totalPrice = order.TotalPrice });
+
+            return Results.Ok(new { success = true, subscriptionMonths = dbOrder.SubscriptionMonths, userPrice = dbOrder.UserPrice });
         });
 
         // 查询续订价格
-        app.MapGet("/api/user/orders/{orderId}/renew-price", async (string orderId, int months, HttpContext ctx,
-            IOrderService orders, IPricingService pricing, ISupplierService supplier) =>
+        app.MapGet("/api/user/orders/{id:long}/renew-price", async (long id, int months, HttpContext ctx,
+            IOrderService orders, IPricingService pricing, SupplierRouter router) =>
         {
             var session = (SessionData)ctx.Items["_session"]!;
-            var order = await orders.GetByOrderIdAsync(orderId);
+            var order = await orders.GetByIdAsync(id);
             if (order == null || order.UserId != session.UserId) return Results.NotFound();
             if (order.Mode != "rental")
                 return Results.Json(new { error = "仅租赁订单" }, statusCode: 400);
 
+            var supplier = router.Get(order.Supplier!.Code);
             var config = await pricing.GetConfigAsync();
-            var services = await supplier.GetRentalServicesAsync(order.CountryCode!, "month", 1);
-            var svc = services.FirstOrDefault(s => s.Code == order.ServiceCode);
-            if (svc == null) return Results.Json(new { error = "服务暂不可用" }, statusCode: 400);
+            var price = await supplier.GetRentalPriceAsync(order.Country!.Code, order.ServiceCode);
+            var monthlyUserPrice = pricing.CalcUserPrice(price.MonthlyCostUsd, "rental", months, order.Country, config);
+            var totalUserPrice = monthlyUserPrice * months;
 
-            var monthlyCost = svc.Price * 30;
-            var totalCost = monthlyCost * months;
-            var totalMarkup = pricing.CalcMarkup(config, totalCost, "rental", months);
-            var monthlyPrice = monthlyCost + pricing.CalcMarkup(config, monthlyCost, "rental", months);
-            var totalPrice = totalCost + totalMarkup;
-
-            return Results.Ok(new { monthlyPrice, totalPrice, usdCnyRate = config.UsdCnyRate });
+            return Results.Ok(new { monthlyUserPrice, totalUserPrice, usdCnyRate = config.UsdCnyRate });
         });
     }
 }

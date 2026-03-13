@@ -17,7 +17,7 @@ namespace SmsBus.Web.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.13")
+                .HasAnnotation("ProductVersion", "9.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
@@ -25,46 +25,36 @@ namespace SmsBus.Web.Migrations
             modelBuilder.Entity("SmsBus.Web.Entities.BalanceTransaction", b =>
                 {
                     b.Property<long>("Id")
-                        .HasColumnType("bigint")
-                        .HasComment("雪花ID");
+                        .HasColumnType("bigint");
 
                     b.Property<decimal>("Amount")
                         .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)")
-                        .HasComment("金额(正=充值/退款,负=消费)");
+                        .HasColumnType("decimal(18,4)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasComment("创建时间");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasComment("删除时间");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("Description")
-                        .HasColumnType("longtext")
-                        .HasComment("描述");
+                        .HasColumnType("longtext");
 
                     b.Property<bool>("IsDeleted")
-                        .HasColumnType("tinyint(1)")
-                        .HasComment("软删除标记");
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<long?>("OperatorId")
-                        .HasColumnType("bigint")
-                        .HasComment("操作人ID(管理员充值时)");
+                        .HasColumnType("bigint");
 
                     b.Property<long?>("RelatedOrderId")
-                        .HasColumnType("bigint")
-                        .HasComment("关联订单ID");
+                        .HasColumnType("bigint");
 
                     b.Property<string>("Type")
                         .IsRequired()
-                        .HasColumnType("longtext")
-                        .HasComment("类型: recharge/purchase/refund");
+                        .HasColumnType("longtext");
 
                     b.Property<long>("UserId")
-                        .HasColumnType("bigint")
-                        .HasComment("用户ID");
+                        .HasColumnType("bigint");
 
                     b.HasKey("Id");
 
@@ -74,278 +64,225 @@ namespace SmsBus.Web.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("balance_transactions", null, t =>
-                        {
-                            t.HasComment("余额流水表");
-                        });
+                    b.ToTable("balance_transactions", (string)null);
+                });
+
+            modelBuilder.Entity("SmsBus.Web.Entities.Country", b =>
+                {
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("ActivationEnabled")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<decimal?>("ActivationMarkupPercent")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("RentalEnabled")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<decimal?>("RentalMarkupPercent")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<decimal?>("ServiceFee12m")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<decimal?>("ServiceFee1m")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<decimal?>("ServiceFee3m")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<decimal?>("ServiceFee6m")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<long>("SupplierId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("SupplierId");
+
+                    b.ToTable("countries", (string)null);
                 });
 
             modelBuilder.Entity("SmsBus.Web.Entities.Order", b =>
                 {
                     b.Property<long>("Id")
-                        .HasColumnType("bigint")
-                        .HasComment("雪花ID");
-
-                    b.Property<int?>("ActivationNumberId")
-                        .HasColumnType("int")
-                        .HasComment("临时接码上游号码ID");
+                        .HasColumnType("bigint");
 
                     b.Property<long?>("AssignedBy")
-                        .HasColumnType("bigint")
-                        .HasComment("管理员分配时的操作人ID");
-
-                    b.Property<bool>("AutoSubscribe")
-                        .HasColumnType("tinyint(1)")
-                        .HasComment("是否自动续费");
+                        .HasColumnType("bigint");
 
                     b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasComment("完成时间");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<decimal>("CostPrice")
                         .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)")
-                        .HasComment("上游实际扣款(USD,balance-diff)");
+                        .HasColumnType("decimal(18,4)");
 
-                    b.Property<string>("CountryCode")
-                        .HasColumnType("longtext")
-                        .HasComment("国家代码");
-
-                    b.Property<string>("CountryName")
-                        .HasColumnType("longtext")
-                        .HasComment("国家名称");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasComment("删除时间");
+                    b.Property<long>("CountryId")
+                        .HasColumnType("bigint");
 
                     b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("datetime(6)")
-                        .HasComment("到期时间");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("tinyint(1)")
-                        .HasComment("软删除标记");
-
-                    b.Property<decimal>("ListPrice")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)")
-                        .HasComment("上游查询商品价(USD,未折扣)");
-
-                    b.Property<decimal>("MarkupAmount")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)")
-                        .HasComment("加价金额(USD)");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("Mode")
                         .IsRequired()
-                        .HasColumnType("longtext")
-                        .HasComment("模式: activation/rental");
+                        .HasColumnType("longtext");
 
                     b.Property<DateTime?>("NextRenewalAt")
-                        .HasColumnType("datetime(6)")
-                        .HasComment("下次续费时间");
+                        .HasColumnType("datetime(6)");
 
-                    b.Property<string>("Number")
-                        .HasColumnType("longtext")
-                        .HasComment("手机号码");
-
-                    b.Property<string>("OrderId")
-                        .IsRequired()
-                        .HasColumnType("varchar(255)")
-                        .HasComment("业务订单号(act_/rent_前缀)");
+                    b.Property<string>("PhoneNumber")
+                        .HasColumnType("longtext");
 
                     b.Property<DateTime>("PurchasedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasComment("购买时间");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<DateTime?>("RenewalFailedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasComment("续费失败时间(null=正常)");
+                        .HasColumnType("datetime(6)");
 
-                    b.Property<int?>("RentalDcount")
-                        .HasColumnType("int")
-                        .HasComment("租赁时长数量");
-
-                    b.Property<string>("RentalDtype")
-                        .HasColumnType("longtext")
-                        .HasComment("租赁时长类型(month/week等)");
-
-                    b.Property<int?>("RentalOrderId")
-                        .HasColumnType("int")
-                        .HasComment("租赁上游订单ID");
+                    b.Property<int>("RenewedCount")
+                        .HasColumnType("int");
 
                     b.Property<string>("ServiceCode")
-                        .HasColumnType("longtext")
-                        .HasComment("服务代码");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("ServiceName")
-                        .HasColumnType("longtext")
-                        .HasComment("服务名称");
-
-                    b.Property<string>("SmsContent")
-                        .HasColumnType("longtext")
-                        .HasComment("最新短信内容");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("Source")
                         .IsRequired()
-                        .HasColumnType("longtext")
-                        .HasComment("来源: user/admin");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasColumnType("longtext")
-                        .HasComment("状态: waiting/activating/active/received/cancelled/expired");
+                        .HasColumnType("longtext");
 
                     b.Property<int?>("SubscriptionMonths")
-                        .HasColumnType("int")
-                        .HasComment("总订阅月数(1/3/6/12)");
+                        .HasColumnType("int");
 
-                    b.Property<int>("SubscriptionRenewedCount")
-                        .HasColumnType("int")
-                        .HasComment("已续费次数(0=首月)");
+                    b.Property<long>("SupplierId")
+                        .HasColumnType("bigint");
 
-                    b.Property<decimal>("TotalPrice")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)")
-                        .HasComment("用户实付(USD)");
+                    b.Property<string>("SupplierOrderId")
+                        .IsRequired()
+                        .HasColumnType("longtext");
 
                     b.Property<long?>("UserId")
-                        .HasColumnType("bigint")
-                        .HasComment("所属用户ID(NULL=未分配)");
+                        .HasColumnType("bigint");
 
-                    b.Property<string>("VerificationCode")
-                        .HasColumnType("longtext")
-                        .HasComment("提取的验证码");
+                    b.Property<decimal>("UserPrice")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("AssignedBy");
 
-                    b.HasIndex("OrderId")
-                        .IsUnique();
+                    b.HasIndex("CountryId");
+
+                    b.HasIndex("SupplierId");
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("orders", null, t =>
-                        {
-                            t.HasComment("订单表");
-                        });
+                    b.ToTable("orders", (string)null);
                 });
 
             modelBuilder.Entity("SmsBus.Web.Entities.OrderSms", b =>
                 {
                     b.Property<long>("Id")
-                        .HasColumnType("bigint")
-                        .HasComment("雪花ID");
+                        .HasColumnType("bigint");
 
                     b.Property<string>("Code")
-                        .HasColumnType("longtext")
-                        .HasComment("提取的验证码");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasComment("删除时间");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("tinyint(1)")
-                        .HasComment("软删除标记");
+                        .HasColumnType("longtext");
 
                     b.Property<long>("OrderId")
-                        .HasColumnType("bigint")
-                        .HasComment("关联订单ID");
+                        .HasColumnType("bigint");
 
                     b.Property<DateTime>("ReceivedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasComment("接收时间");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("Text")
                         .IsRequired()
-                        .HasColumnType("longtext")
-                        .HasComment("短信全文");
+                        .HasColumnType("longtext");
 
                     b.HasKey("Id");
 
                     b.HasIndex("OrderId");
 
-                    b.ToTable("order_sms", null, t =>
-                        {
-                            t.HasComment("订单短信记录表");
-                        });
+                    b.ToTable("order_sms", (string)null);
                 });
 
             modelBuilder.Entity("SmsBus.Web.Entities.PricingConfig", b =>
                 {
                     b.Property<long>("Id")
-                        .HasColumnType("bigint")
-                        .HasComment("固定ID=1");
+                        .HasColumnType("bigint");
 
-                    b.Property<decimal>("ActivationProfitPercent")
+                    b.Property<decimal>("DefaultActivationMarkupPercent")
                         .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)")
-                        .HasComment("临时接码商品利润百分比");
+                        .HasColumnType("decimal(10,2)");
 
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasComment("删除时间");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("tinyint(1)")
-                        .HasComment("软删除标记");
-
-                    b.Property<bool>("MarkupEnabled")
-                        .HasColumnType("tinyint(1)")
-                        .HasComment("是否启用加价");
-
-                    b.Property<decimal>("RentalProfitPercent")
+                    b.Property<decimal>("DefaultRentalMarkupPercent")
                         .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)")
-                        .HasComment("租赁商品利润百分比");
+                        .HasColumnType("decimal(10,2)");
 
                     b.Property<decimal>("ServiceFee12m")
                         .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)")
-                        .HasComment("12个月服务费百分比");
+                        .HasColumnType("decimal(10,2)");
 
                     b.Property<decimal>("ServiceFee1m")
                         .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)")
-                        .HasComment("1个月服务费百分比");
+                        .HasColumnType("decimal(10,2)");
 
                     b.Property<decimal>("ServiceFee3m")
                         .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)")
-                        .HasComment("3个月服务费百分比");
+                        .HasColumnType("decimal(10,2)");
 
                     b.Property<decimal>("ServiceFee6m")
                         .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)")
-                        .HasComment("6个月服务费百分比");
+                        .HasColumnType("decimal(10,2)");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasComment("更新时间");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<decimal>("UsdCnyRate")
                         .HasPrecision(10, 4)
-                        .HasColumnType("decimal(10,4)")
-                        .HasComment("USD/CNY汇率");
+                        .HasColumnType("decimal(10,4)");
 
                     b.HasKey("Id");
 
-                    b.ToTable("pricing_config", null, t =>
-                        {
-                            t.HasComment("定价配置表(单行)");
-                        });
+                    b.ToTable("pricing_config", (string)null);
 
                     b.HasData(
                         new
                         {
                             Id = 1L,
-                            ActivationProfitPercent = 0m,
-                            IsDeleted = false,
-                            MarkupEnabled = false,
-                            RentalProfitPercent = 0m,
+                            DefaultActivationMarkupPercent = 0m,
+                            DefaultRentalMarkupPercent = 0m,
                             ServiceFee12m = 0m,
                             ServiceFee1m = 0m,
                             ServiceFee3m = 0m,
@@ -355,64 +292,95 @@ namespace SmsBus.Web.Migrations
                         });
                 });
 
+            modelBuilder.Entity("SmsBus.Web.Entities.Supplier", b =>
+                {
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ApiBaseUrl")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("ApiKey")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("RequiresService")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("SupportsActivation")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("SupportsRental")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("suppliers", (string)null);
+                });
+
             modelBuilder.Entity("SmsBus.Web.Entities.User", b =>
                 {
                     b.Property<long>("Id")
-                        .HasColumnType("bigint")
-                        .HasComment("雪花ID");
+                        .HasColumnType("bigint");
 
                     b.Property<decimal>("Balance")
                         .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)")
-                        .HasComment("账户余额(USD)");
+                        .HasColumnType("decimal(18,4)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasComment("注册时间");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasComment("删除时间");
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("DisplayName")
-                        .HasColumnType("longtext")
-                        .HasComment("显示名称");
+                        .HasColumnType("longtext");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("tinyint(1)")
-                        .HasComment("是否启用");
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("IsAdmin")
-                        .HasColumnType("tinyint(1)")
-                        .HasComment("是否管理员");
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("IsDeleted")
-                        .HasColumnType("tinyint(1)")
-                        .HasComment("软删除标记");
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
-                        .HasColumnType("longtext")
-                        .HasComment("密码哈希(BCrypt)");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("Phone")
                         .IsRequired()
-                        .HasColumnType("varchar(255)")
-                        .HasComment("手机号（登录账号）");
+                        .HasColumnType("varchar(255)");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasComment("更新时间");
+                        .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("Phone")
                         .IsUnique();
 
-                    b.ToTable("users", null, t =>
-                        {
-                            t.HasComment("用户表");
-                        });
+                    b.ToTable("users", (string)null);
                 });
 
             modelBuilder.Entity("SmsBus.Web.Entities.BalanceTransaction", b =>
@@ -440,6 +408,17 @@ namespace SmsBus.Web.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("SmsBus.Web.Entities.Country", b =>
+                {
+                    b.HasOne("SmsBus.Web.Entities.Supplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Supplier");
+                });
+
             modelBuilder.Entity("SmsBus.Web.Entities.Order", b =>
                 {
                     b.HasOne("SmsBus.Web.Entities.User", "Assigner")
@@ -447,12 +426,28 @@ namespace SmsBus.Web.Migrations
                         .HasForeignKey("AssignedBy")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("SmsBus.Web.Entities.Country", "Country")
+                        .WithMany()
+                        .HasForeignKey("CountryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SmsBus.Web.Entities.Supplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("SmsBus.Web.Entities.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Assigner");
+
+                    b.Navigation("Country");
+
+                    b.Navigation("Supplier");
 
                     b.Navigation("User");
                 });

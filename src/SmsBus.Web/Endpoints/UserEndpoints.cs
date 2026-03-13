@@ -28,10 +28,14 @@ public static class UserEndpoints
             var list = await orders.GetUserOrdersAsync(session.UserId);
             return Results.Ok(list.Select(o => new
             {
-                o.Id, o.OrderId, o.Number, o.CountryName, o.ServiceName, o.Mode, o.Status,
-                o.TotalPrice, o.SmsContent, o.VerificationCode, o.PurchasedAt, o.ExpiresAt, o.Source,
-                o.SubscriptionMonths, o.SubscriptionRenewedCount, o.AutoSubscribe, o.NextRenewalAt,
-                smsList = o.SmsList.Select(s => new { s.Text, s.Code, s.ReceivedAt })
+                o.Id, o.PhoneNumber,
+                countryCode = o.Country?.Code,
+                countryName = o.Country?.Name,
+                o.ServiceCode, o.ServiceName,
+                o.Mode, o.Status, o.UserPrice, o.PurchasedAt, o.ExpiresAt, o.Source,
+                o.SubscriptionMonths, o.RenewedCount, o.NextRenewalAt,
+                smsList = o.SmsList.OrderByDescending(s => s.ReceivedAt)
+                    .Select(s => new { s.Text, s.Code, s.ReceivedAt })
             }));
         });
 

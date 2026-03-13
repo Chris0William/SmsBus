@@ -1,6 +1,6 @@
 namespace SmsBus.Web.Entities;
 
-public class OrderSms : ISoftDelete
+public class OrderSms
 {
     public long Id { get; set; }
     public long OrderId { get; set; }
@@ -10,8 +10,4 @@ public class OrderSms : ISoftDelete
 
     // 导航属性
     public Order? Order { get; set; }
-
-    // 软删除
-    public bool IsDeleted { get; set; }
-    public DateTime? DeletedAt { get; set; }
 }

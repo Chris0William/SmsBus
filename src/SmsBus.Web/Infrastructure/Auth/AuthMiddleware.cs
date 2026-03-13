@@ -71,9 +71,11 @@ public static class AuthMiddleware
                     await next(); return;
                 }
 
-                // 用户/服务 API 需要登录
+                // 用户/服务/国家 API 需要登录
                 if (path.StartsWith("/api/user/", StringComparison.OrdinalIgnoreCase) ||
-                    path.StartsWith("/api/services/", StringComparison.OrdinalIgnoreCase))
+                    path.StartsWith("/api/services/", StringComparison.OrdinalIgnoreCase) ||
+                    path.StartsWith("/api/countries", StringComparison.OrdinalIgnoreCase) ||
+                    path.StartsWith("/api/purchase/", StringComparison.OrdinalIgnoreCase))
                 {
                     if (session == null)
                     {

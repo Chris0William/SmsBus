@@ -257,6 +257,148 @@ public partial class SmsBusClient : IDisposable
         return root;
     }
 
+    // ============ 租赁 API (base: https://api.sms-bus.com) ============
+
+    private const string RentApiBase = "https://api.sms-bus.com";
+
+    /// <summary>获取可租赁的国家/地区列表</summary>
+    public async Task<List<Models.RentalArea>> GetRentalAreasAsync(CancellationToken ct = default)
+    {
+        var json = await GetRentJsonAsync("/v1/rent/list/area", ct);
+        var result = new List<Models.RentalArea>();
+        foreach (var item in json.EnumerateArray())
+        {
+            result.Add(new Models.RentalArea
+            {
+                AreaCode = item.GetProperty("area_code").GetString() ?? "",
+                AreaTitle = item.GetProperty("area_title").GetString() ?? "",
+                UnitPrice = item.GetProperty("unit_price").GetInt32(),
+                MinMonth = item.GetProperty("min_month").GetInt32(),
+                Total = item.GetProperty("total").GetInt32()
+            });
+        }
+        return result;
+    }
+
+    /// <summary>租用一个号码</summary>
+    /// <param name="areaCode">地区代码 (US/CA/GB)</param>
+    /// <param name="months">租赁月数</param>
+    public async Task<Models.RentalOrder> RentNumberAsync(string areaCode, int months, CancellationToken ct = default)
+    {
+        var json = await GetRentJsonAsync($"/v1/rent/get/number?area_code={areaCode}&time={months}", ct);
+        return new Models.RentalOrder
+        {
+            OrderId = json.GetProperty("order_id").GetString() ?? "",
+            MobileNumber = json.GetProperty("mobile_number").GetString() ?? "",
+            DialingCode = json.GetProperty("dialing_code").GetString() ?? "",
+            AreaCode = json.GetProperty("area_code").GetString() ?? "",
+            ExpireAt = json.GetProperty("expire_at").GetDateTime(),
+            KeepAt = json.GetProperty("keep_at").GetDateTime()
+        };
+    }
+
+    /// <summary>续费租赁号码</summary>
+    public async Task<Models.RentalOrder> RenewRentalAsync(string areaCode, string mobileNumber, int months, CancellationToken ct = default)
+    {
+        var json = await GetRentJsonAsync($"/v1/rent/renew/number?area_code={areaCode}&mobile_number={Uri.EscapeDataString(mobileNumber)}&time={months}", ct);
+        return new Models.RentalOrder
+        {
+            OrderId = json.GetProperty("order_id").GetString() ?? "",
+            MobileNumber = json.GetProperty("mobile_number").GetString() ?? "",
+            DialingCode = json.GetProperty("dialing_code").GetString() ?? "",
+            AreaCode = json.GetProperty("area_code").GetString() ?? "",
+            ExpireAt = json.GetProperty("expire_at").GetDateTime(),
+            KeepAt = json.GetProperty("keep_at").GetDateTime()
+        };
+    }
+
+    /// <summary>取消租赁订单（20分钟内且未收到短信）</summary>
+    public async Task CancelRentalAsync(string orderId, CancellationToken ct = default)
+    {
+        await GetRentJsonAsync($"/v1/rent/cancel/order?order_id={orderId}", ct);
+    }
+
+    /// <summary>获取租赁号码的短信列表</summary>
+    public async Task<List<Models.RentalSms>> GetRentalSmsListAsync(string areaCode, string mobileNumber,
+        int pageNum = 1, int pageSize = 100, CancellationToken ct = default)
+    {
+        var json = await GetRentJsonAsync($"/v1/rent/list/sms?area_code={areaCode}&mobile_number={Uri.EscapeDataString(mobileNumber)}&page_num={pageNum}&page_size={pageSize}", ct);
+        var result = new List<Models.RentalSms>();
+        if (json.TryGetProperty("list", out var list))
+        {
+            foreach (var item in list.EnumerateArray())
+            {
+                result.Add(new Models.RentalSms
+                {
+                    Content = item.GetProperty("content").GetString() ?? "",
+                    ReceiveAt = item.GetProperty("receive_at").GetDateTime()
+                });
+            }
+        }
+        return result;
+    }
+
+    /// <summary>获取租赁号码状态（通过 list/number 接口查询）</summary>
+    public async Task<Models.RentalNumber?> GetRentalNumberAsync(string areaCode, string mobileNumber, CancellationToken ct = default)
+    {
+        var json = await GetRentJsonAsync($"/v1/rent/list/number?area_code={areaCode}&mobile_number={Uri.EscapeDataString(mobileNumber)}&only_active=false&page_size=1", ct);
+        if (json.TryGetProperty("list", out var list))
+        {
+            foreach (var item in list.EnumerateArray())
+            {
+                return new Models.RentalNumber
+                {
+                    AreaCode = item.GetProperty("area_code").GetString() ?? "",
+                    AreaName = item.GetProperty("area_name").GetString() ?? "",
+                    DialingCode = item.GetProperty("dialing_code").GetString() ?? "",
+                    MobileNumber = item.GetProperty("mobile_number").GetString() ?? "",
+                    FirstSeenAt = item.GetProperty("first_seen_at").GetDateTime(),
+                    ExpireAt = item.GetProperty("expire_at").GetDateTime(),
+                    KeepAt = item.GetProperty("keep_at").GetDateTime(),
+                    AutoRenew = item.GetProperty("auto_renew").GetBoolean()
+                };
+            }
+        }
+        return null;
+    }
+
+    /// <summary>发送租赁 API 请求（基础URL不同于临时接码）</summary>
+    private async Task<JsonElement> GetRentJsonAsync(string pathAndQuery, CancellationToken ct)
+    {
+        // pathAndQuery: "/v1/rent/list/area" 或 "/v1/rent/get/number?area_code=US&time=1"
+        var separator = pathAndQuery.Contains('?') ? '&' : '?';
+        var url = $"{RentApiBase}{pathAndQuery}{separator}token={_token}";
+
+        var response = await _http.GetAsync(url, ct);
+        var body = await response.Content.ReadAsStringAsync(ct);
+
+        if (!response.IsSuccessStatusCode)
+            throw new SmsBusException($"HTTP {(int)response.StatusCode}: {body}");
+
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement.Clone();
+
+        if (root.TryGetProperty("code", out var codeProp))
+        {
+            var code = codeProp.ValueKind == JsonValueKind.Number
+                ? codeProp.GetInt32()
+                : int.TryParse(codeProp.GetString(), out var c) ? c : 0;
+
+            if (code != 200)
+            {
+                var msg = root.TryGetProperty("message", out var msgProp)
+                    ? msgProp.GetString()
+                    : "未知错误";
+                throw new SmsBusException(msg ?? "API 返回错误", code.ToString());
+            }
+        }
+
+        if (root.TryGetProperty("data", out var dataProp))
+            return dataProp;
+
+        return root;
+    }
+
     [GeneratedRegex(@"\b(\d{4,8})\b")]
     private static partial Regex VerificationCodeRegex();
 

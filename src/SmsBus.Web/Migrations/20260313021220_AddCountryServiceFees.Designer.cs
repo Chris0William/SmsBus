@@ -12,15 +12,15 @@ using SmsBus.Web.Data;
 namespace SmsBus.Web.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260305064928_AddSubscriptionFields")]
-    partial class AddSubscriptionFields
+    [Migration("20260313021220_AddCountryServiceFees")]
+    partial class AddCountryServiceFees
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.13")
+                .HasAnnotation("ProductVersion", "9.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
@@ -37,8 +37,14 @@ namespace SmsBus.Web.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<string>("Description")
                         .HasColumnType("longtext");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<long?>("OperatorId")
                         .HasColumnType("bigint");
@@ -64,19 +70,74 @@ namespace SmsBus.Web.Migrations
                     b.ToTable("balance_transactions", (string)null);
                 });
 
+            modelBuilder.Entity("SmsBus.Web.Entities.Country", b =>
+                {
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("ActivationEnabled")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<decimal?>("ActivationMarkupPercent")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("RentalEnabled")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<decimal?>("RentalMarkupPercent")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<decimal?>("ServiceFee12m")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<decimal?>("ServiceFee1m")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<decimal?>("ServiceFee3m")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<decimal?>("ServiceFee6m")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<long>("SupplierId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("SupplierId");
+
+                    b.ToTable("countries", (string)null);
+                });
+
             modelBuilder.Entity("SmsBus.Web.Entities.Order", b =>
                 {
                     b.Property<long>("Id")
                         .HasColumnType("bigint");
 
-                    b.Property<int?>("ActivationNumberId")
-                        .HasColumnType("int");
-
                     b.Property<long?>("AssignedBy")
                         .HasColumnType("bigint");
-
-                    b.Property<bool>("AutoSubscribe")
-                        .HasColumnType("tinyint(1)");
 
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("datetime(6)");
@@ -85,18 +146,11 @@ namespace SmsBus.Web.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
 
-                    b.Property<string>("CountryCode")
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("CountryName")
-                        .HasColumnType("longtext");
+                    b.Property<long>("CountryId")
+                        .HasColumnType("bigint");
 
                     b.Property<DateTime?>("ExpiresAt")
                         .HasColumnType("datetime(6)");
-
-                    b.Property<decimal>("MarkupAmount")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
 
                     b.Property<string>("Mode")
                         .IsRequired()
@@ -105,32 +159,22 @@ namespace SmsBus.Web.Migrations
                     b.Property<DateTime?>("NextRenewalAt")
                         .HasColumnType("datetime(6)");
 
-                    b.Property<string>("Number")
+                    b.Property<string>("PhoneNumber")
                         .HasColumnType("longtext");
-
-                    b.Property<string>("OrderId")
-                        .IsRequired()
-                        .HasColumnType("varchar(255)");
 
                     b.Property<DateTime>("PurchasedAt")
                         .HasColumnType("datetime(6)");
 
-                    b.Property<int?>("RentalDcount")
-                        .HasColumnType("int");
+                    b.Property<DateTime?>("RenewalFailedAt")
+                        .HasColumnType("datetime(6)");
 
-                    b.Property<string>("RentalDtype")
-                        .HasColumnType("longtext");
-
-                    b.Property<int?>("RentalOrderId")
+                    b.Property<int>("RenewedCount")
                         .HasColumnType("int");
 
                     b.Property<string>("ServiceCode")
                         .HasColumnType("longtext");
 
                     b.Property<string>("ServiceName")
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("SmsContent")
                         .HasColumnType("longtext");
 
                     b.Property<string>("Source")
@@ -144,25 +188,27 @@ namespace SmsBus.Web.Migrations
                     b.Property<int?>("SubscriptionMonths")
                         .HasColumnType("int");
 
-                    b.Property<int>("SubscriptionRenewedCount")
-                        .HasColumnType("int");
+                    b.Property<long>("SupplierId")
+                        .HasColumnType("bigint");
 
-                    b.Property<decimal>("TotalPrice")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
+                    b.Property<string>("SupplierOrderId")
+                        .IsRequired()
+                        .HasColumnType("longtext");
 
                     b.Property<long?>("UserId")
                         .HasColumnType("bigint");
 
-                    b.Property<string>("VerificationCode")
-                        .HasColumnType("longtext");
+                    b.Property<decimal>("UserPrice")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("AssignedBy");
 
-                    b.HasIndex("OrderId")
-                        .IsUnique();
+                    b.HasIndex("CountryId");
+
+                    b.HasIndex("SupplierId");
 
                     b.HasIndex("UserId");
 
@@ -199,12 +245,29 @@ namespace SmsBus.Web.Migrations
                     b.Property<long>("Id")
                         .HasColumnType("bigint");
 
-                    b.Property<bool>("MarkupEnabled")
-                        .HasColumnType("tinyint(1)");
+                    b.Property<decimal>("DefaultActivationMarkupPercent")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
 
-                    b.Property<decimal>("MarkupPerDay")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
+                    b.Property<decimal>("DefaultRentalMarkupPercent")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<decimal>("ServiceFee12m")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<decimal>("ServiceFee1m")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<decimal>("ServiceFee3m")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<decimal>("ServiceFee6m")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)");
@@ -221,11 +284,60 @@ namespace SmsBus.Web.Migrations
                         new
                         {
                             Id = 1L,
-                            MarkupEnabled = false,
-                            MarkupPerDay = 0m,
+                            DefaultActivationMarkupPercent = 0m,
+                            DefaultRentalMarkupPercent = 0m,
+                            ServiceFee12m = 0m,
+                            ServiceFee1m = 0m,
+                            ServiceFee3m = 0m,
+                            ServiceFee6m = 0m,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             UsdCnyRate = 7.25m
                         });
+                });
+
+            modelBuilder.Entity("SmsBus.Web.Entities.Supplier", b =>
+                {
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ApiBaseUrl")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("ApiKey")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("RequiresService")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("SupportsActivation")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("SupportsRental")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("suppliers", (string)null);
                 });
 
             modelBuilder.Entity("SmsBus.Web.Entities.User", b =>
@@ -240,6 +352,9 @@ namespace SmsBus.Web.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<string>("DisplayName")
                         .HasColumnType("longtext");
 
@@ -247,6 +362,9 @@ namespace SmsBus.Web.Migrations
                         .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("IsAdmin")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IsDeleted")
                         .HasColumnType("tinyint(1)");
 
                     b.Property<string>("PasswordHash")
@@ -293,6 +411,17 @@ namespace SmsBus.Web.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("SmsBus.Web.Entities.Country", b =>
+                {
+                    b.HasOne("SmsBus.Web.Entities.Supplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Supplier");
+                });
+
             modelBuilder.Entity("SmsBus.Web.Entities.Order", b =>
                 {
                     b.HasOne("SmsBus.Web.Entities.User", "Assigner")
@@ -300,12 +429,28 @@ namespace SmsBus.Web.Migrations
                         .HasForeignKey("AssignedBy")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("SmsBus.Web.Entities.Country", "Country")
+                        .WithMany()
+                        .HasForeignKey("CountryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SmsBus.Web.Entities.Supplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("SmsBus.Web.Entities.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Assigner");
+
+                    b.Navigation("Country");
+
+                    b.Navigation("Supplier");
 
                     b.Navigation("User");
                 });

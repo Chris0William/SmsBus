@@ -24,45 +24,43 @@ public class PricingService : IPricingService
             config = new PricingConfig { Id = 1 };
             _db.PricingConfigs.Add(config);
         }
-        config.RentalProfitPercent = update.RentalProfitPercent;
-        config.ActivationProfitPercent = update.ActivationProfitPercent;
+        config.DefaultActivationMarkupPercent = update.DefaultActivationMarkupPercent;
+        config.DefaultRentalMarkupPercent = update.DefaultRentalMarkupPercent;
         config.ServiceFee1m = update.ServiceFee1m;
         config.ServiceFee3m = update.ServiceFee3m;
         config.ServiceFee6m = update.ServiceFee6m;
         config.ServiceFee12m = update.ServiceFee12m;
-        config.MarkupEnabled = update.MarkupEnabled;
         config.UsdCnyRate = update.UsdCnyRate;
         config.UpdatedAt = DateTime.Now;
         await _db.SaveChangesAsync();
     }
 
-    /// <summary>计算加价金额 = 成本 × (商品利润% + 服务费利润%) / 100</summary>
-    public decimal CalcMarkup(PricingConfig config, decimal costPrice, string mode, int months = 1)
+    /// <summary>
+    /// 计算用户价格
+    /// 加价% 优先用国家级配置，为null时用全局配置
+    /// </summary>
+    public decimal CalcUserPrice(decimal costPrice, string mode, int months, Country? country, PricingConfig config)
     {
-        if (!config.MarkupEnabled) return 0;
-
+        decimal markupPercent;
         if (mode == "activation")
-            return Math.Round(costPrice * config.ActivationProfitPercent / 100, 4);
+            markupPercent = country?.ActivationMarkupPercent ?? config.DefaultActivationMarkupPercent;
+        else
+            markupPercent = country?.RentalMarkupPercent ?? config.DefaultRentalMarkupPercent;
 
-        var serviceFee = GetServiceFeePercent(config, months);
-        var totalPercent = config.RentalProfitPercent + serviceFee;
-        return Math.Round(costPrice * totalPercent / 100, 4);
+        var serviceFeePercent = GetServiceFeePercent(country, config, months);
+        var totalPercent = markupPercent + serviceFeePercent;
+        var userPrice = costPrice * (1 + totalPercent / 100);
+        return Math.Round(userPrice, 4);
     }
 
-    /// <summary>计算用户价格 = 成本 + 加价</summary>
-    public decimal CalcUserPrice(PricingConfig config, decimal costPrice, string mode, int months = 1)
-    {
-        return costPrice + CalcMarkup(config, costPrice, mode, months);
-    }
-
-    private static decimal GetServiceFeePercent(PricingConfig config, int months)
+    private static decimal GetServiceFeePercent(Country? country, PricingConfig config, int months)
     {
         return months switch
         {
-            <= 1 => config.ServiceFee1m,
-            <= 3 => config.ServiceFee3m,
-            <= 6 => config.ServiceFee6m,
-            _ => config.ServiceFee12m
+            <= 1 => country?.ServiceFee1m ?? config.ServiceFee1m,
+            <= 3 => country?.ServiceFee3m ?? config.ServiceFee3m,
+            <= 6 => country?.ServiceFee6m ?? config.ServiceFee6m,
+            _ => country?.ServiceFee12m ?? config.ServiceFee12m
         };
     }
 }

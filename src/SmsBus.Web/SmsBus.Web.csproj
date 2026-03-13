@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SmsPva.Sdk\SmsPva.Sdk.csproj" />
+    <ProjectReference Include="..\SmsBus.Sdk\SmsBus.Sdk.csproj" />
   </ItemGroup>
 
   <ItemGroup>
