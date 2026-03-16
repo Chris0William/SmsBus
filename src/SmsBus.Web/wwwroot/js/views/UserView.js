@@ -376,7 +376,7 @@ const UserView = {
             this.actService = '';
             this.actServices = [];
             const c = this.actCountries.find(x => x.code === this.actCountry);
-            this.actNeedService = c ? c.requiresService : true;
+            this.actNeedService = c ? c.requiresServiceForActivation : true;
             if (this.actNeedService) {
                 try {
                     const res = await fetch(`/api/countries/${this.actCountry}/services/activation`);
@@ -460,7 +460,7 @@ const UserView = {
             this.rentalServiceList = [];
             this.rentPriceInfo = null;
             const c = this.rentalCountries.find(x => x.code === this.rentCountry);
-            this.rentNeedService = c ? c.requiresService : true;
+            this.rentNeedService = c ? c.requiresServiceForRental : true;
             if (this.rentNeedService) {
                 try {
                     const res = await fetch(`/api/countries/${this.rentCountry}/services/rental`);

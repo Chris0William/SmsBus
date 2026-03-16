@@ -10,7 +10,8 @@ public class Supplier
     public bool IsActive { get; set; } = true;
     public bool SupportsActivation { get; set; }            // 支持临时接码
     public bool SupportsRental { get; set; }                // 支持租赁
-    public bool RequiresService { get; set; } = true;       // 下单需选服务（false=全服务）
+    public bool RequiresServiceForActivation { get; set; } = true;  // 临时接码需选服务
+    public bool RequiresServiceForRental { get; set; } = true;      // 租赁需选服务
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
 }

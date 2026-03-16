@@ -294,8 +294,10 @@ const AdminView = {
                                 <template #default="{row}">
                                     <el-tag v-if="row.supportsActivation" size="small" style="margin-right:4px">临时</el-tag>
                                     <el-tag v-if="row.supportsRental" size="small" type="warning" style="margin-right:4px">租赁</el-tag>
-                                    <el-tag v-if="row.requiresService" size="small" type="info">需选服务</el-tag>
-                                    <el-tag v-else size="small" type="success">全服务</el-tag>
+                                    <el-tag v-if="row.requiresServiceForActivation" size="small" type="info" style="margin-right:2px">临时选服务</el-tag>
+                                    <el-tag v-else size="small" type="success" style="margin-right:2px">临时全服务</el-tag>
+                                    <el-tag v-if="row.requiresServiceForRental" size="small" type="info">租赁选服务</el-tag>
+                                    <el-tag v-else size="small" type="success">租赁全服务</el-tag>
                                 </template>
                             </el-table-column>
                             <el-table-column prop="isActive" label="状态" width="80">
@@ -515,7 +517,7 @@ const AdminView = {
             this.selectedActService = null;
             this.adminActServices = [];
             const c = this.adminActCountries.find(x => x.code === this.selectedActCountry);
-            this.adminActNeedService = c ? c.requiresService : true;
+            this.adminActNeedService = c ? c.requiresServiceForActivation : true;
             if (this.adminActNeedService) {
                 try {
                     const res = await fetch(`/api/countries/${this.selectedActCountry}/services/activation`);
@@ -563,7 +565,7 @@ const AdminView = {
             this.selectedRentalService = null;
             this.adminRentServices = [];
             const c = this.adminRentCountries.find(x => x.code === this.selectedRentalCountry);
-            this.adminRentNeedService = c ? c.requiresService : true;
+            this.adminRentNeedService = c ? c.requiresServiceForRental : true;
             if (this.adminRentNeedService) {
                 try {
                     const res = await fetch(`/api/countries/${this.selectedRentalCountry}/services/rental`);

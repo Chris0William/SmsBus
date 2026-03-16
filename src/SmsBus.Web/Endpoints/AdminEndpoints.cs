@@ -48,7 +48,8 @@ public static class AdminEndpoints
             return Results.Ok(list.Select(s => new
             {
                 s.Id, s.Code, s.Name, s.ApiKey, s.ApiBaseUrl,
-                s.IsActive, s.SupportsActivation, s.SupportsRental, s.RequiresService, s.CreatedAt
+                s.IsActive, s.SupportsActivation, s.SupportsRental,
+                s.RequiresServiceForActivation, s.RequiresServiceForRental, s.CreatedAt
             }));
         });
 

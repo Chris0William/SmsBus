@@ -21,7 +21,8 @@ public static class ServiceEndpoints
             {
                 c.Id, c.Code, c.Name,
                 c.ActivationEnabled, c.RentalEnabled,
-                requiresService = c.Supplier!.RequiresService
+                requiresServiceForActivation = c.Supplier!.RequiresServiceForActivation,
+                requiresServiceForRental = c.Supplier!.RequiresServiceForRental
             }));
         });
 
@@ -30,7 +31,7 @@ public static class ServiceEndpoints
         {
             var country = await db.Countries.Include(c => c.Supplier).FirstOrDefaultAsync(c => c.Code == code && c.IsActive);
             if (country?.Supplier == null) return Results.NotFound();
-            if (!country.Supplier.RequiresService) return Results.Ok(Array.Empty<object>());
+            if (!country.Supplier.RequiresServiceForActivation) return Results.Ok(Array.Empty<object>());
 
             var supplier = router.Get(country.Supplier.Code);
             try
@@ -46,7 +47,7 @@ public static class ServiceEndpoints
         {
             var country = await db.Countries.Include(c => c.Supplier).FirstOrDefaultAsync(c => c.Code == code && c.IsActive);
             if (country?.Supplier == null) return Results.NotFound();
-            if (!country.Supplier.RequiresService) return Results.Ok(Array.Empty<object>());
+            if (!country.Supplier.RequiresServiceForRental) return Results.Ok(Array.Empty<object>());
 
             var supplier = router.Get(country.Supplier.Code);
             try

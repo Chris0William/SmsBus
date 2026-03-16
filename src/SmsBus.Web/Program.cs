@@ -82,9 +82,11 @@ using (var scope = app.Services.CreateScope())
     var supplierSeeds = new[]
     {
         new { Code = "smspva", Name = "SmsPva", ApiBaseUrl = "https://smspva.com",
-              SupportsActivation = true, SupportsRental = true, RequiresService = true },
+              SupportsActivation = true, SupportsRental = true,
+              RequiresServiceForActivation = true, RequiresServiceForRental = true },
         new { Code = "smsbus", Name = "SMS-BUS", ApiBaseUrl = "https://sms-bus.com",
-              SupportsActivation = true, SupportsRental = true, RequiresService = false },
+              SupportsActivation = true, SupportsRental = true,
+              RequiresServiceForActivation = true, RequiresServiceForRental = false },
     };
     foreach (var seed in supplierSeeds)
     {
@@ -96,14 +98,17 @@ using (var scope = app.Services.CreateScope())
                 Id = SnowflakeId.NextId(),
                 Code = seed.Code, Name = seed.Name, ApiBaseUrl = seed.ApiBaseUrl,
                 IsActive = true, SupportsActivation = seed.SupportsActivation,
-                SupportsRental = seed.SupportsRental, RequiresService = seed.RequiresService
+                SupportsRental = seed.SupportsRental,
+                RequiresServiceForActivation = seed.RequiresServiceForActivation,
+                RequiresServiceForRental = seed.RequiresServiceForRental
             });
         }
         else
         {
             existing.SupportsActivation = seed.SupportsActivation;
             existing.SupportsRental = seed.SupportsRental;
-            existing.RequiresService = seed.RequiresService;
+            existing.RequiresServiceForActivation = seed.RequiresServiceForActivation;
+            existing.RequiresServiceForRental = seed.RequiresServiceForRental;
         }
     }
     await db.SaveChangesAsync();
