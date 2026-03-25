@@ -33,7 +33,7 @@ public static class UserEndpoints
                 countryName = o.Country?.Name,
                 o.ServiceCode, o.ServiceName,
                 o.Mode, o.Status, o.UserPrice, o.PurchasedAt, o.ExpiresAt, o.Source,
-                o.SubscriptionMonths, o.RenewedCount, o.NextRenewalAt,
+                o.SubscriptionMonths,
                 smsList = o.SmsList.OrderByDescending(s => s.ReceivedAt)
                     .Select(s => new { s.Text, s.Code, s.ReceivedAt })
             }));

@@ -214,8 +214,8 @@ const UserView = {
                                 <span style="color:#9ca3af">\${{ (o.userPrice||0).toFixed(2) }} ≈ ¥{{ cny(o.userPrice||0) }}</span>
                             </div>
                             <div v-if="o.mode==='rental'" style="margin-top:6px;font-size:12px;color:#6b7280;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                                <span v-if="o.expiresAt">到期: {{ fmtDate(o.expiresAt) }}</span>
-                                <span v-if="o.subscriptionMonths>1">· {{ o.subscriptionMonths }}个月 (已续{{ o.renewedCount||0 }}次)</span>
+                                <span v-if="o.subscriptionMonths&&o.purchasedAt">到期: {{ fmtDate(new Date(new Date(o.purchasedAt).setMonth(new Date(o.purchasedAt).getMonth()+o.subscriptionMonths))) }} · {{ o.subscriptionMonths }}个月</span>
+                                <span v-else-if="o.expiresAt">到期: {{ fmtDate(o.expiresAt) }}</span>
                             </div>
                             <div v-if="o.mode==='activation'&&o.status==='waiting'" style="margin-top:8px">
                                 <p style="color:#3b82f6;font-size:13px">
