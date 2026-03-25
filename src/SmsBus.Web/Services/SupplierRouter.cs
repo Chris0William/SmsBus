@@ -4,11 +4,11 @@ namespace SmsBus.Web.Services;
 
 public class SupplierRouter
 {
-    private readonly Dictionary<string, ISupplierService> _map;
+    private readonly Dictionary<string, ISupplierService> _map = new(StringComparer.OrdinalIgnoreCase);
 
-    public SupplierRouter(IEnumerable<ISupplierService> suppliers)
+    public void Register(ISupplierService supplier)
     {
-        _map = suppliers.ToDictionary(s => s.Code, StringComparer.OrdinalIgnoreCase);
+        _map[supplier.Code] = supplier;
     }
 
     public ISupplierService Get(string code)

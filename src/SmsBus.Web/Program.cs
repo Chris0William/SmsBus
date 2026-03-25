@@ -32,24 +32,7 @@ var redisConn = builder.Configuration.GetConnectionString("Redis") ?? "localhost
 builder.Services.AddSingleton<IConnectionMultiplexer>(
     ConnectionMultiplexer.Connect(redisConn));
 
-// SmsPva SDK（供 SmsPvaSupplierService 使用）
-var apiKey = builder.Configuration["SmsPva:ApiKey"] ?? "";
-builder.Services.AddSingleton(new SmsPvaClient(apiKey));
-
-// SmsBus SDK
-var smsBusToken = builder.Configuration["SmsBus:ApiToken"] ?? "";
-var smsBusBaseUrl = builder.Configuration["SmsBus:ApiBaseUrl"];
-if (!string.IsNullOrEmpty(smsBusToken))
-    builder.Services.AddSingleton(new SmsBusClient(smsBusToken, smsBusBaseUrl));
-
-// 供应商服务（多供应商支持）
-builder.Services.AddSingleton<ISupplierService>(sp =>
-    new SmsPvaSupplierService(sp.GetRequiredService<SmsPvaClient>(),
-        sp.GetRequiredService<IConfiguration>()));
-if (!string.IsNullOrEmpty(smsBusToken))
-    builder.Services.AddSingleton<ISupplierService>(sp =>
-        new SmsBusSupplierService(sp.GetRequiredService<SmsBusClient>(),
-            sp.GetRequiredService<IConfiguration>()));
+// SupplierRouter: 启动后从数据库读取 ApiKey，动态注册供应商服务
 builder.Services.AddSingleton<SupplierRouter>();
 
 // 业务服务（接口注入）
@@ -82,9 +65,11 @@ using (var scope = app.Services.CreateScope())
     var supplierSeeds = new[]
     {
         new { Code = "smspva", Name = "SmsPva", ApiBaseUrl = "https://smspva.com",
+              ApiKey = "G3hyASdxv54VI50BivpFpZPLxk2Oji",
               SupportsActivation = true, SupportsRental = true,
               RequiresServiceForActivation = true, RequiresServiceForRental = true },
         new { Code = "smsbus", Name = "SMS-BUS", ApiBaseUrl = "https://sms-bus.com",
+              ApiKey = "306560b27e3a4ba3b6587d9fa466d39e",
               SupportsActivation = true, SupportsRental = true,
               RequiresServiceForActivation = true, RequiresServiceForRental = false },
     };
@@ -97,6 +82,7 @@ using (var scope = app.Services.CreateScope())
             {
                 Id = SnowflakeId.NextId(),
                 Code = seed.Code, Name = seed.Name, ApiBaseUrl = seed.ApiBaseUrl,
+                ApiKey = seed.ApiKey,
                 IsActive = true, SupportsActivation = seed.SupportsActivation,
                 SupportsRental = seed.SupportsRental,
                 RequiresServiceForActivation = seed.RequiresServiceForActivation,
@@ -105,6 +91,9 @@ using (var scope = app.Services.CreateScope())
         }
         else
         {
+            // ApiKey 不覆盖（管理端可能已修改）
+            if (string.IsNullOrEmpty(existing.ApiKey))
+                existing.ApiKey = seed.ApiKey;
             existing.SupportsActivation = seed.SupportsActivation;
             existing.SupportsRental = seed.SupportsRental;
             existing.RequiresServiceForActivation = seed.RequiresServiceForActivation;
@@ -112,6 +101,26 @@ using (var scope = app.Services.CreateScope())
         }
     }
     await db.SaveChangesAsync();
+
+    // 从数据库读取 ApiKey，创建 SDK 客户端，注册到 SupplierRouter
+    var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+    var router = scope.ServiceProvider.GetRequiredService<SupplierRouter>();
+    var activeSuppliers = await db.Suppliers.Where(s => s.IsActive).ToListAsync();
+    foreach (var s in activeSuppliers)
+    {
+        if (string.IsNullOrEmpty(s.ApiKey)) continue;
+        switch (s.Code)
+        {
+            case "smspva":
+                var smsPvaClient = new SmsPvaClient(s.ApiKey);
+                router.Register(new SmsPvaSupplierService(smsPvaClient, config));
+                break;
+            case "smsbus":
+                var smsBusClient = new SmsBusClient(s.ApiKey, s.ApiBaseUrl);
+                router.Register(new SmsBusSupplierService(smsBusClient, config));
+                break;
+        }
+    }
 }
 
 // 中间件
